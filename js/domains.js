@@ -20,7 +20,7 @@ PG.domains = [
     shortRole: 'Game Developer',
     code: true, build: true, creative: true, platforms: true,
     keywords: [
-      ['*(?<!bei|zu)spiel', 2], ['games?(?![a-zäöüß])|gamedesign', 3], ['gaming|gamer', 1], ['zock', 2],
+      ['*(?<!bei|zu|ab|platten|schau|vor)spiel(?!platz|zeug)', 2], ['games?(?![a-zäöüß])|gamedesign', 3], ['gaming|gamer', 1], ['zock', 2],
       ['gamedev|game ?design|spieleentwicklung|spielentwicklung', 4],
       ['gegner', 2], ['boss(?:kampf|fight|e)?', 1], ['level', 1],
       ['multiplayer|singleplayer|koop|co-?op|pvp|pve', 3], ['npcs?', 3], ['quests?', 2], ['missionen', 2],
@@ -98,12 +98,12 @@ PG.domains = [
     mission: 'meine Idee in eine moderne, schnelle und durchdachte Webseite zu verwandeln – von der Struktur über das Design bis zum fertigen Code',
     aspects: [
       ['Ziel & Zielgruppe', 'Was soll ein Besucher auf der Seite tun (kaufen, Kontakt aufnehmen, staunen, lernen)? Wer ist er, und was erwartet er?'],
+      ['Technik & Aufbau', 'Passender Tech-Stack, Ordnerstruktur, Komponenten und bei Bedarf Formulare, Datenbank oder CMS.'],
       ['Seitenstruktur & Navigation', 'Sitemap mit allen Seiten und Abschnitten, klare Navigation und der wichtigste Call-to-Action.'],
       ['Design-System', 'Farbpalette mit Hex-Werten, Schriftpaarung, Abstände und Komponenten-Stil – eigenständig statt Standard-Template.'],
       ['Inhalte & Texte', 'Überschriften, Texte und Bildideen für jeden Abschnitt – echte Inhalte statt Lorem ipsum.'],
       ['Responsives Layout', 'Wie die Seite auf Handy, Tablet und Desktop aussieht und funktioniert.'],
       ['Interaktion & Animation', 'Hover-Effekte, Übergänge und Scroll-Animationen – gezielt eingesetzt, nicht überladen.'],
-      ['Technik & Aufbau', 'Passender Tech-Stack, Ordnerstruktur, Komponenten und bei Bedarf Formulare, Datenbank oder CMS.'],
       ['Performance & SEO', 'Ladezeit, Bildoptimierung, Meta-Tags und eine saubere Überschriften-Hierarchie.'],
       ['Barrierefreiheit', 'Kontraste, Tastaturbedienung, Alt-Texte und semantisches HTML.'],
       ['Veröffentlichung', 'Hosting, Domain und Deployment Schritt für Schritt (z. B. GitHub Pages, Netlify oder Vercel).']
@@ -138,7 +138,52 @@ PG.domains = [
       'Das Handy-Layout erst am Ende bedenken.',
       'Zu viele Animationen, die vom Inhalt ablenken und die Seite langsam machen.'
     ],
-    stackHint: 'Wenn ich keine Technik vorgebe, wähle den einfachsten passenden Stack (z. B. reines HTML, CSS und JavaScript für einfache Seiten, React oder Next.js für komplexe Web-Apps) und begründe die Wahl kurz.'
+    stackHint: 'Wenn ich keine Technik vorgebe, wähle den einfachsten passenden Stack (z. B. reines HTML, CSS und JavaScript für einfache Seiten, React oder Next.js für komplexe Web-Apps) und begründe die Wahl kurz.',
+    // Webseite als Werkzeug ("eine Website, mit der ich … kann") statt als Info- oder Werbeseite
+    variants: {
+      tool: {
+        mission: 'meine Idee als gut bedienbare, zuverlässige Web-Anwendung umzusetzen – von der Kernfunktion über die Oberfläche bis zum fertigen Code',
+        aspects: [
+          ['Kernfunktion & Ablauf', 'Was passiert vom Öffnen bis zum fertigen Ergebnis? Jeder Schritt aus Sicht des Nutzers, inklusive Sonderfälle.'],
+          ['Technik & Aufbau', 'Frontend und – falls nötig – Backend, Tech-Stack, Ordnerstruktur und Datenfluss zwischen den Teilen.'],
+          ['Bedienoberfläche', 'Eingaben, Buttons, Statusanzeigen und Ergebnisliste – übersichtlich und ohne Ballast.'],
+          ['Fehler & Sonderfälle', 'Was passiert bei ungültigen Eingaben, fehlender Verbindung oder abgebrochenen Vorgängen?'],
+          ['Design', 'Farbpalette mit Hex-Werten, Schriften und Komponenten-Stil – eigenständig und klar.'],
+          ['Responsives Layout', 'Funktioniert auch im schmalen Fenster und auf dem Handy.'],
+          ['Performance', 'Schnelle Reaktion, kein Einfrieren bei langen Vorgängen, sinnvolle Grenzen.'],
+          ['Barrierefreiheit', 'Kontraste, Tastaturbedienung und verständliche Beschriftungen.'],
+          ['Veröffentlichung', 'Hosting und Deployment Schritt für Schritt (z. B. GitHub Pages, Netlify, Vercel oder ein eigener Server).']
+        ],
+        standards: [
+          'Die Kernfunktion läuft zuverlässig, bevor Extras dazukommen.',
+          'Klare Trennung von Oberfläche und Logik, nachvollziehbare Dateistruktur.',
+          'Jeder längere Vorgang zeigt seinen Fortschritt und lässt sich abbrechen.',
+          'Verständliche Fehlermeldungen statt Abstürzen oder leerer Seiten.',
+          'Kontraste nach WCAG AA und sichtbarer Tastaturfokus.',
+          'Sicherheit: Eingaben werden geprüft, keine geheimen Schlüssel im Frontend.'
+        ],
+        deliverables: [
+          'Eine kurze Projektübersicht: Kernfunktion, Ablauf, Architektur und Dateistruktur',
+          'Den vollständigen Code aller Dateien mit Dateipfad, direkt lauffähig',
+          'Eine Anleitung zum Installieren und Starten mit exakten Befehlen',
+          'Testfälle: was ich eingeben kann und was dabei herauskommen muss',
+          'Eine Liste sinnvoller nächster Verbesserungen'
+        ],
+        clarify: [
+          { q: 'Welche Funktion ist dir am wichtigsten, und was soll am Ende genau herauskommen?' },
+          { q: 'Gibt es Vorlieben beim Design oder Vorbilder?', skip: 'refs' },
+          { q: 'Welche Technik soll verwendet werden?', skip: 'tech' },
+          { q: 'Nur für dich oder auch für andere Leute?', skip: 'local' }
+        ],
+        pitfalls: [
+          'Viel Design, aber die Kernfunktion klappt nicht zuverlässig.',
+          'Lange Vorgänge ohne Fortschrittsanzeige – die Seite wirkt eingefroren.',
+          'Fehlermeldungen, die nur Technikern etwas sagen.',
+          'Alles in eine einzige riesige Datei schreiben.'
+        ],
+        stackHint: 'Wenn ich keine Technik vorgebe, wähle den einfachsten Stack, der die Kernfunktion wirklich kann – mit Backend (z. B. Python oder Node.js), wenn der Browser allein nicht reicht – und begründe die Wahl kurz.'
+      }
+    }
   },
 
   {
@@ -825,3 +870,181 @@ PG.domains = [
     ]
   }
 ];
+
+/*
+ * Fachwissen in einem Satz, wenn ein Bereich nur als Thema mitspielt
+ * (z. B. Musik bei einer Webseite zum Musik-Herunterladen).
+ */
+(function () {
+  const TOPIC_EXPERTISE = {
+    game: 'Game Design und Spielmechaniken',
+    website: 'Webentwicklung',
+    app: 'App-Entwicklung',
+    software: 'Softwareentwicklung und Automatisierung',
+    art3d: '3D-Grafik und Blender',
+    image: 'Grafikdesign und Bild-KIs',
+    video: 'Video, Schnitt und Content-Erstellung',
+    music: 'Musik und Audio (Dateiformate, Metadaten, Wiedergabe)',
+    writing: 'Texten und Storytelling',
+    business: 'Geschäftsmodelle und Marketing',
+    learning: 'Didaktik und Lernmethoden',
+    fitness: 'Trainingslehre und Sporternährung',
+    data: 'Datenanalyse'
+  };
+  PG.domains.forEach((d) => { d.topicExpertise = TOPIC_EXPERTISE[d.id] || ''; });
+})();
+
+/*
+ * Themen und Rahmenbedingungen, die quer zu den Bereichen auftauchen.
+ * Wird ein Thema in der Idee erkannt, ergänzt es den Prompt um passendes Fachwissen,
+ * Themenpunkte, Standards und Rückfragen. "condition" landet unter "Rahmenbedingungen".
+ *
+ * patterns: wie bei keywords (Wortanfang, * = mitten im Wort)
+ * onlyFor / skipFor: Bereiche, für die das Thema gilt bzw. nicht gilt
+ * requires: zusätzliches Muster, das ebenfalls vorkommen muss
+ * excludes: Themen, die dieses Thema abschalten
+ */
+PG.topics = (function () {
+  const CODE_DOMAINS = ['website', 'app', 'software', 'game', 'data', 'general'];
+
+  return [
+  {
+    id: 'local',
+    onlyFor: CODE_DOMAINS,
+    patterns: [
+      'lokal', 'offline', 'localhost', 'nur (?:für )?mich', 'auf meinem (?:pc|rechner|computer|laptop)',
+      'n(?:icht|ix|ichts) (?:\\S+ )?(?:veröffentlich|online stell|ins internet)',
+      'kein(?:e[nm]?)? (?:hosting|veröffentlichung|domain)'
+    ],
+    condition: 'Läuft ausschließlich lokal auf meinem PC (z. B. über localhost). Nichts wird veröffentlicht – kein Hosting, keine Domain, kein Deployment.',
+    standards: ['Start per Doppelklick (z. B. start.bat) ohne komplizierte Einrichtung; jede nötige Installation wird Schritt für Schritt erklärt.'],
+    dropAspects: /^(Veröffentlichung|Monetarisierung)$/,
+    dropStandards: /SEO|Lighthouse/,
+    localOnly: true
+  },
+  {
+    id: 'free',
+    patterns: ['kostenlos', 'gratis', 'umsonst', 'ohne (?:kosten|geld)', 'nichts kosten', 'kein geld'],
+    condition: 'Nur kostenlose Werkzeuge, Bibliotheken und Dienste – nichts, wofür ich bezahlen muss.'
+  },
+  {
+    id: 'noAccount',
+    onlyFor: CODE_DOMAINS,
+    patterns: ['ohne (?:anmeldung|login|account|konto|registrierung)', 'kein(?:e[nm]?)? (?:anmeldung|login|account|konto)'],
+    condition: 'Keine Anmeldung und keine Benutzerkonten.'
+  },
+  {
+    id: 'mediaDownload',
+    tool: true,
+    onlyFor: CODE_DOMAINS,
+    patterns: ['download', 'herunter ?(?:zu ?)?lad', 'runter ?(?:zu ?)?lad', 'rippen', '(?:als|in|zu|auf) (?:mp3|mp4|wav|flac)', 'konvertier', 'umwandeln'],
+    requires: 'mp3|mp4|wav|flac|musik|song|lied|audio|video|spotify|youtube|soundcloud|playlist|podcast|album|hörbuch',
+    expertise: 'Medien-Downloads (z. B. mit yt-dlp)',
+    aspects: [
+      ['Quelle & Rechtliches', 'Woher kommen die Dateien? Viele Streamingdienste (z. B. Spotify) sind kopiergeschützt und lassen sich nicht direkt speichern. Erkläre ehrlich, was technisch und rechtlich (in Deutschland) möglich ist, und schlag den besten legalen Weg vor.'],
+      ['Download-Ablauf', 'Link oder Suche eingeben, Vorschau, Warteschlange, Fortschrittsanzeige, Abbrechen und verständliche Fehlermeldungen.']
+    ],
+    standards: ['Ein Browser allein kann keine Dateien von fremden Diensten laden und umwandeln – plane dafür ein kleines lokales Backend (z. B. Python oder Node.js mit FFmpeg).'],
+    clarify: [{ q: 'Einzelne Songs bzw. Videos oder ganze Playlists und Alben?' }]
+  },
+  {
+    id: 'audioFiles',
+    skipFor: ['music'],
+    patterns: ['mp3', 'flac', 'wav', 'aac', 'm4a', 'ogg', 'audiodatei', 'musikdatei', 'id3', 'bitrate', 'plattenspieler', 'mp3-?player'],
+    expertise: 'Audioformate (MP3, FLAC, WAV), Konvertierung mit FFmpeg und Musik-Metadaten (ID3-Tags)',
+    aspects: [
+      ['Audioformat & Qualität', 'Format und Bitrate (z. B. MP3 mit 320 kbps), einheitliche Lautstärke und vollständige ID3-Tags (Titel, Interpret, Album, Cover).']
+    ]
+  },
+  {
+    id: 'deviceExport',
+    patterns: ['usb', 'stick', 'sd-?karte', 'plattenspieler', 'mp3-?player', 'autoradio', 'im auto', 'abspielgerät'],
+    aspects: [
+      ['Export aufs Abspielgerät', 'Dateinamen, Ordnerstruktur und Format so wählen, dass das Zielgerät sie sicher abspielt (z. B. USB-Stick in FAT32 oder exFAT, keine Sonderzeichen, ein Ordner pro Album bzw. Playlist).']
+    ],
+    clarify: [{ q: 'Welches Gerät spielt die Dateien ab, und welche Formate liest es?' }]
+  },
+  {
+    id: 'services',
+    onlyFor: CODE_DOMAINS,
+    patterns: ['spotify', 'youtube', 'soundcloud', 'deezer', 'apple music', 'instagram', 'tiktok', 'twitch', 'discord', 'steam', 'reddit', 'whatsapp', 'telegram', 'google drive', 'google sheets'],
+    aspects: [
+      ['Externe Dienste', 'Welche offiziellen Schnittstellen gibt es (z. B. Spotify Web API, YouTube Data API), was liefern sie, welche Grenzen und Nutzungsbedingungen gelten – und was geht ohne sie?']
+    ]
+  },
+  {
+    id: 'ai',
+    tool: true,
+    onlyFor: CODE_DOMAINS,
+    patterns: [
+      'chatbot', 'llm', 'ollama', 'openai', '(?:chatgpt|gpt|claude|gemini)[- ]?api', 'sprachmodell',
+      'ki[- ]?(?:funktion|anbindung|integration|assistent|chat|feature)', 'ki (?:soll|antwortet|erkennt|beantwortet|generiert)',
+      'eingebaute[nr]? ki', 'mit (?:einer )?eigenen ki'
+    ],
+    expertise: 'KI-Integration (LLM-APIs, Prompt Engineering, lokale Modelle mit Ollama)',
+    aspects: [
+      ['KI-Anbindung', 'Welches Modell (lokal z. B. mit Ollama oder per API), Prompt-Design, Kosten, sichere Aufbewahrung von API-Schlüsseln und Umgang mit falschen Antworten.']
+    ]
+  },
+  {
+    id: 'accounts',
+    onlyFor: CODE_DOMAINS,
+    excludes: ['noAccount'],
+    patterns: ['login', 'einlogg', 'anmeld(?:ung|en)', 'registrier', 'benutzerkont', 'nutzerkont', 'account'],
+    aspects: [
+      ['Benutzerkonten & Sicherheit', 'Registrierung, Login, sichere Passwortspeicherung (Hashing), Sessions und Datenschutz – nur so viel, wie wirklich nötig ist.']
+    ]
+  },
+  {
+    id: 'payments',
+    onlyFor: CODE_DOMAINS.concat('business'),
+    patterns: ['bezahl', 'zahlung', 'paypal', 'stripe', 'checkout', 'warenkorb', 'abo(?:nnement)?(?![a-zäöüß])', 'in-?app-?käufe?'],
+    aspects: [
+      ['Zahlungen', 'Zahlungsanbieter (z. B. Stripe oder PayPal), Testmodus, Sicherheit, Rechnungen und rechtliche Pflichten.']
+    ]
+  },
+  {
+    id: 'storage',
+    tool: true,
+    onlyFor: CODE_DOMAINS,
+    patterns: ['abspeichern', 'datenbank', 'verlauf', 'favorit', 'merkliste', 'sammlung', 'bibliothek'],
+    aspects: [
+      ['Daten speichern', 'Was wird gespeichert, wo (Browser-Speicher, Datei, SQLite oder Cloud), und wie bleibt es bei Updates erhalten?']
+    ]
+  },
+  {
+    id: 'realtime',
+    tool: true,
+    onlyFor: CODE_DOMAINS,
+    patterns: ['multiplayer', 'online (?:spielen|zusammen|gegeneinander)', 'mit freunden', 'echtzeit', 'live-?chat', 'chatten', 'chat(?![a-zäöüß])'],
+    aspects: [
+      ['Echtzeit & Netzwerk', 'Server-Architektur, WebSockets bzw. Netcode, Synchronisation, Latenz und Schutz vor Missbrauch.']
+    ]
+  },
+  {
+    id: 'maps',
+    onlyFor: ['website', 'app', 'software', 'general'],
+    patterns: ['karten?(?![a-zäöüß])', 'landkarte', 'standort', 'gps', 'google maps', 'openstreetmap', 'umkreis'],
+    aspects: [
+      ['Karten & Standort', 'Kartenanbieter (z. B. OpenStreetMap mit Leaflet), Standortfreigabe, Datenschutz und Verhalten ohne Internet.']
+    ]
+  },
+  {
+    id: 'notifications',
+    onlyFor: ['website', 'app', 'software', 'general'],
+    patterns: ['erinner', 'wecker', 'benachrichtig', 'notification', 'push'],
+    aspects: [
+      ['Erinnerungen & Benachrichtigungen', 'Wann und wie benachrichtigt wird (Push, E-Mail, im Browser), welche Berechtigungen nötig sind und wie man es abschaltet.']
+    ]
+  },
+  {
+    id: 'uploads',
+    tool: true,
+    onlyFor: CODE_DOMAINS,
+    patterns: ['hochlad', 'upload', 'drag ?(?:and|&|n) ?drop', 'dateien? (?:auswählen|reinziehen|einfügen)'],
+    aspects: [
+      ['Dateien & Uploads', 'Erlaubte Dateitypen und -größen, Vorschau, Fortschritt, Speicherort und Sicherheit.']
+    ]
+  }
+];
+})();

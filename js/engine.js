@@ -109,26 +109,108 @@ PG.engine = (function () {
     return t ? t.charAt(0).toUpperCase() + t.slice(1) : '';
   }
 
-  function detect(text) {
+  /*
+   * Was soll entstehen? Gesucht wird ein Ding-Wort mit Artikel davor ("eine Website",
+   * "ein Open-World-Spiel", "einen Discord Bot"). Das schlägt alle Stichwörter:
+   * Bei "eine Website, auf der ich Songs herunterlade" geht es um eine Website, nicht um einen Song.
+   * Reihenfolge zählt: speziellere Wörter zuerst ("Trainingsprogramm" vor "Programm").
+   */
+  const ARTICLES = new Set(['ein', 'eine', 'einen', 'einem', 'einer', 'eines', 'mein', 'meine', 'meinen', 'meinem', 'meiner',
+    'unser', 'unsere', 'unseren', 'unserem', 'das', 'die', 'den', 'dem', 'der', 'ne', 'nen', 'son']);
+  const ARTIFACTS = [
+    ['fitness', /(?:trainings|ernährungs|workout|fitness|lauf)-?(?:plan|programm|routine)$|^workout$/],
+    ['learning', /^(?:lernplan|lernzettel|zusammenfassung|referat|karteikarten?|spickzettel)$/],
+    ['business', /(?:business|geschäfts|marketing|content|social-media)-?(?:plan|strategie|idee|konzept|modell)$|^(?:startup|start-up|firma|marke|online-business)$/],
+    ['data', /(?:tabelle|auswertung|dashboard|statistik|diagramm)$/],
+    ['website', /(?:webseite|website|homepage|internetseite|landingpage|landing-page|onlineshop|online-shop|webshop|webapp|web-app|webanwendung|portfolio|blog)$/],
+    ['app', /^(?:[a-zäöüß0-9]+-)?app$|^(?:handy|lern|fitness|web|ios|android|smartphone|iphone)app$/],
+    ['game', /(?:spiel|game|rpg|shooter|platformer|plattformer|jump'?n'?run)$/, /^(?:beispiel|zuspiel|vorspiel|schauspiel|abspiel|zusammenspiel)$/],
+    ['software', /(?:programm|tool|bot|skript|script|software|plugin|extension|addon|add-on|mod|modmenü|mod-menü|scraper|crawler|chatbot|assistent)$/, /(?:angebot|verbot|gebot|aufgebot)$/],
+    ['art3d', /^3d-[a-zäöüß-]+$/],
+    ['music', /(?:song|lied|beat|track|songtext|album|jingle|soundtrack|podcast|hörspiel|hörbuch|remix)$/, /(?:mitglied|glied)$/],
+    ['video', /(?:video|short|reel|clip|film|trailer|vlog|doku|montage)$/],
+    ['image', /(?:logo|bild|poster|plakat|flyer|banner|wallpaper|thumbnail|cover|illustration|zeichnung|avatar|sticker|tattoo|grafik|icon|emote|meme)$/, /(?:vorbild|leitbild|weltbild|abbild|sinnbild)$/],
+    ['writing', /(?:text|geschichte|story|buch|roman|aufsatz|gedicht|brief|e-mail|email|bewerbung|anschreiben|lebenslauf|rede|artikel|essay|erörterung|newsletter|fanfiction|kapitel)$/, /^(?:kontext|subtext)$/]
+  ];
+  const CREATE_VERB = /^(?:erstell\w*|bau(?:e|en|st|t)?|programmier\w*|mach(?:e|en|st|t)?|entwickel\w*|entwickl\w*|coden?|codest|gestalt\w*|design\w*|schreib\w*|produzier\w*|hab(?:e|en)?|hätte)[,.]?$/i;
+
+  const tokenOf = (w) => w.toLowerCase().replace(/^[^a-zäöüß0-9]+|[^a-zäöüß0-9]+$/g, '');
+
+  function artifactDomain(token) {
+    for (const [id, re, not] of ARTIFACTS) {
+      if (re.test(token) && !(not && not.test(token))) return id;
+    }
+    return null;
+  }
+
+  function findArtifact(idea) {
+    const sentences = idea.split(/(?<=[.!?\n])\s+/);
+    for (let si = 0; si < sentences.length; si++) {
+      const words = sentences[si].split(/\s+/).filter(Boolean);
+      const tokens = words.map(tokenOf);
+      for (let i = 0; i < tokens.length; i++) {
+        const domain = artifactDomain(tokens[i]);
+        if (!domain) continue;
+        let start = -1;
+        for (let j = i - 1; j >= Math.max(0, i - 4); j--) {
+          if (/[,;:!?]$/.test(words[j])) break;
+          if (ARTICLES.has(tokens[j])) { start = j; break; }
+        }
+        // Am Anfang der Idee geht es auch ohne Artikel ("Logo für meinen Clan")
+        if (start === -1 && si === 0 && i <= 1) start = 0;
+        if (start === -1) continue;
+        return { domain, words, start, noun: i };
+      }
+    }
+    return null;
+  }
+
+  // "Worum es geht" in den Worten der Nutzerin bzw. des Nutzers, ohne Füllwörter davor
+  function projectPhrase(art) {
+    const rest = art.words.slice(art.noun + 1);
+    while (rest.length && CREATE_VERB.test(rest[0])) rest.shift();
+    let phrase = art.words.slice(art.start, art.noun + 1).concat(rest).join(' ');
+    phrase = phrase.replace(/\s+(?:zu\s+)?(?:bauen|erstellen|programmieren|machen|entwickeln|coden|haben|schreiben|designen|gestalten|produzieren)\s*$/i, '');
+    phrase = phrase.replace(/[\s.!?,;:]+$/, '');
+    phrase = phrase.replace(/([^,])\s+((?:in|mit|auf|bei|über|durch|für)\s+(?:der|dem|denen|welcher|welchem)\s|wo(?:mit)?\s+(?:ich|man|wir)\s)/i, '$1, $2');
+    if (phrase.length > 200) phrase = phrase.slice(0, 200).replace(/\s+\S*$/, '') + ' …';
+    return phrase.charAt(0).toLowerCase() + phrase.slice(1);
+  }
+
+  function keywordScores(text) {
     const t = String(text || '').toLowerCase();
-    const scores = DOMAINS.filter((d) => d.id !== 'general').map((d) => {
+    return DOMAINS.filter((d) => d.id !== 'general').map((d) => {
       let score = 0;
       d._kw.forEach(([re, w]) => { if (re.test(t)) score += w; });
       return { domain: d, score };
     });
+  }
+
+  function detect(text) {
+    const artifact = findArtifact(String(text || ''));
+    const scores = keywordScores(text);
+    if (artifact) scores.find((x) => x.domain.id === artifact.domain).score += 10;
     scores.sort((a, b) => b.score - a.score);
     const top = scores[0];
-    if (!top || top.score < 2) return { primary: byId('general'), secondary: null, score: 0 };
+    if (!top || top.score < 4) return { primary: byId('general'), secondary: top && top.score >= 3 ? top.domain : null, score: 0, artifact: null };
     const second = scores[1];
-    const secondary = second && second.score >= 3 && second.score >= top.score * 0.5 ? second.domain : null;
-    return { primary: top.domain, secondary, score: top.score };
+    const secondary = second && second.score >= 3 ? second.domain : null;
+    return { primary: top.domain, secondary, score: top.score, artifact };
   }
 
   function uniq(list) { return [...new Set(list)]; }
 
+  const SERVICES = [
+    ['spotify', 'Spotify'], ['youtube(?: music)?', 'YouTube'], ['soundcloud', 'SoundCloud'], ['deezer', 'Deezer'],
+    ['apple music', 'Apple Music'], ['instagram', 'Instagram'], ['tiktok', 'TikTok'], ['twitch', 'Twitch'],
+    ['discord', 'Discord'], ['steam', 'Steam'], ['reddit', 'Reddit'], ['whatsapp', 'WhatsApp'], ['telegram', 'Telegram'],
+    ['google drive', 'Google Drive'], ['google sheets', 'Google Sheets']
+  ].map(([p, label]) => [word(p), label]);
+
   function extract(idea) {
     const tech = uniq(TECH.filter(([re]) => re.test(idea)).map(([, l]) => l));
     const platforms = uniq(PLATFORMS.filter(([re]) => re.test(idea)).map(([, l]) => l));
+    const services = uniq(SERVICES.filter(([re]) => re.test(idea)).map(([, l]) => l));
     const refs = [];
     REFS.forEach((r) => {
       const m = idea.match(r.re);
@@ -144,8 +226,29 @@ PG.engine = (function () {
     const a1 = idea.match(AUDIENCE_FIELD) || idea.match(AUDIENCE);
     if (a1) audience = a1[1].trim().replace(/^./, (c) => c.toUpperCase());
     const scope = SCOPE_LARGE.test(idea) ? 'large' : SCOPE_SMALL.test(idea) ? 'small' : '';
-    return { tech, platforms, refs: uniq(refs), audience, scope };
+    return { tech, platforms, services, refs: uniq(refs.filter((r) => !services.includes(r))), audience, scope };
   }
+
+  // Querschnittsthemen (Download, MP3, nur lokal, Login …) aus PG.topics
+  const TOPICS = (PG.topics || []).map((t) => Object.assign({}, t, {
+    _res: t.patterns.map(compile),
+    _req: t.requires ? new RegExp(t.requires, 'i') : null
+  }));
+
+  function detectTopics(idea, domainId) {
+    const t = idea.toLowerCase();
+    const found = TOPICS.filter((topic) => {
+      if (topic.onlyFor && !topic.onlyFor.includes(domainId)) return false;
+      if (topic.skipFor && topic.skipFor.includes(domainId)) return false;
+      if (!topic._res.some((re) => re.test(t))) return false;
+      return !topic._req || topic._req.test(t);
+    });
+    const ids = found.map((x) => x.id);
+    return found.filter((topic) => !(topic.excludes || []).some((id) => ids.includes(id)));
+  }
+
+  // Ein Werkzeug ("…, mit der ich … kann") statt einer reinen Info-Seite?
+  const TOOL_HINT = /(?:in|mit|auf|bei|über|durch)\s+(?:der|dem|denen|welcher|welchem)\s+(?:ich|man|wir|nutzer|leute|user|jeder)\s|(?<![a-zäöüß])(?:rechner|generator|konverter|converter|downloader|planer|tracker|manager|editor|tool)(?![a-zäöüß])/i;
 
   /* ---------- Bausteine ---------- */
 
@@ -157,73 +260,107 @@ PG.engine = (function () {
   const numbered = (items) => items.map((i, n) => `${n + 1}. ${i}`).join('\n');
   const ensureDot = (s) => (/[.!?…]$/.test(s) ? s : s + '.');
 
-  function roleText(d, second, facts) {
+  function roleText(d, ctx) {
     const article = /^[a-zäöü]/.test(d.role) ? 'ein ' : '';
     const parts = [`Du bist ${article}${d.role}. ${d.expertise}`];
-    if (facts.tech.length) parts.push(`Du bist besonders sicher im Umgang mit ${joinList(facts.tech)}.`);
-    if (second) parts.push(`Außerdem bringst du fundiertes Wissen als ${second.shortRole} mit, weil meine Idee auch diesen Bereich berührt.`);
+    if (ctx.facts.tech.length) parts.push(`Du bist besonders sicher im Umgang mit ${joinList(ctx.facts.tech)}.`);
+    const extra = ctx.topics.map((t) => t.expertise).filter(Boolean);
+    if (!extra.length && ctx.second && ctx.second.topicExpertise) extra.push(ctx.second.topicExpertise);
+    if (extra.length) parts.push(`Zusätzliches Fachwissen, das du für genau dieses Projekt mitbringst: ${extra.join('; ')}.`);
     parts.push('Du arbeitest wie ein erfahrener Mentor: strukturiert, ehrlich und lösungsorientiert.');
     return parts.join(' ');
   }
 
-  function ideaText(idea, d, second, facts, s, xml) {
-    const rows = [];
-    rows.push(`Bereich: ${d.field}${second ? ` (mit Bezug zu ${second.field})` : ''}`);
-    if (d.platforms && facts.platforms.length) rows.push(`Plattform: ${joinList(facts.platforms)}`);
-    if (facts.tech.length) rows.push(`Technik & Tools: ${joinList(facts.tech)}`);
-    if (facts.refs.length) rows.push(`Bezug / Inspiration: ${joinList(facts.refs)}`);
-    if (facts.audience) rows.push(`Zielgruppe: ${facts.audience}`);
-    if (s.tone.trim()) rows.push(`Stil & Ton: ${s.tone.trim()}`);
-    if (facts.scope === 'large') rows.push('Umfang: groß angelegt – bitte mit einem kleinen ersten Meilenstein starten');
-    if (facts.scope === 'small') rows.push('Umfang: bewusst klein und schnell umsetzbar');
-    rows.push(`Mein Erfahrungsstand: ${LEVEL[s.level].label}`);
+  function ideaText(idea, d, ctx, s, xml) {
+    const out = [];
+    if (ctx.phrase) out.push(`Worum es geht: „${ctx.phrase}“`);
+    const label = s.dictated ? 'Meine Idee in meinen eigenen Worten (diktiert – einzelne Wörter können falsch erkannt sein):' : 'Meine Idee in meinen eigenen Worten:';
+    out.push(`${label}\n\n${xml ? `<beschreibung>\n${idea}\n</beschreibung>` : `"""\n${idea}\n"""`}`);
 
-    const block = xml ? `<beschreibung>\n${idea}\n</beschreibung>` : `"""\n${idea}\n"""`;
-    return `Ich möchte folgende Idee umsetzen:\n\n${block}\n\nEckdaten:\n${bullets(rows)}`;
+    const conditions = ctx.topics.map((t) => t.condition).filter(Boolean);
+    if (conditions.length) out.push(`Rahmenbedingungen:\n${bullets(conditions)}`);
+
+    const rows = [`Bereich: ${d.field}`];
+    if (ctx.second) rows.push(`Thema: ${ctx.second.label}`);
+    if (d.platforms && ctx.facts.platforms.length) rows.push(`Plattform: ${joinList(ctx.facts.platforms)}`);
+    if (ctx.facts.tech.length) rows.push(`Technik & Tools: ${joinList(ctx.facts.tech)}`);
+    if (ctx.facts.services.length) rows.push(`Beteiligte Dienste: ${joinList(ctx.facts.services)}`);
+    if (ctx.facts.refs.length) rows.push(`Bezug / Inspiration: ${joinList(ctx.facts.refs)}`);
+    if (ctx.facts.audience) rows.push(`Zielgruppe: ${ctx.facts.audience}`);
+    if (s.tone.trim()) rows.push(`Stil & Ton: ${s.tone.trim()}`);
+    if (ctx.facts.scope === 'large') rows.push('Umfang: groß angelegt – bitte mit einem kleinen ersten Meilenstein starten');
+    if (ctx.facts.scope === 'small') rows.push('Umfang: bewusst klein und schnell umsetzbar');
+    rows.push(`Mein Erfahrungsstand: ${LEVEL[s.level].label}`);
+    out.push(`Eckdaten:\n${bullets(rows)}`);
+    return out.join('\n\n');
   }
 
-  function missionText(d, facts, s, agent) {
+  function missionText(d, ctx, agent) {
     const parts = [`Deine Aufgabe ist es, ${d.mission}.`];
+    if (ctx.phrase) {
+      parts.push(`Im Mittelpunkt steht genau mein Projekt: ${ctx.phrase}. Bleib eng an meiner Idee – ergänze sinnvolle Details, aber ändere weder das Ziel noch die Kernfunktion.`);
+    } else {
+      parts.push('Bleib eng an meiner Idee – ergänze sinnvolle Details, aber ändere nicht ihr Ziel.');
+    }
     parts.push(agent
       ? 'Du arbeitest direkt in meinem Projektordner: Lege Dateien selbst an, führe Befehle aus und teste das Ergebnis, bevor du mir Bescheid gibst.'
       : 'Das Ergebnis soll so konkret und vollständig sein, dass ich sofort damit loslegen kann.');
-    if (facts.scope === 'large' && d.build) {
+    if (ctx.facts.scope === 'large' && d.build) {
       parts.push('Meine Idee ist groß. Definiere zuerst einen realistischen ersten Meilenstein (MVP bzw. Vertical Slice), der schnell funktioniert, und plane die weiteren Ausbaustufen darauf auf.');
-    } else if (facts.scope === 'small') {
+    } else if (ctx.facts.scope === 'small') {
       parts.push('Halte den Umfang bewusst klein, damit schnell ein fertiges Ergebnis entsteht.');
     }
-    if (d.stackHint && !facts.tech.length) parts.push(d.stackHint);
+    if (d.stackHint && !ctx.facts.tech.length) parts.push(d.stackHint);
     return parts.join(' ');
   }
 
-  function aspectsText(d, n) {
-    return numbered(d.aspects.slice(0, n).map(([title, text]) => `**${title}:** ${text}`));
+  // Themen der Idee zuerst, danach die passenden Standardpunkte des Bereichs
+  function aspectList(d, ctx, n) {
+    const fromTopics = [];
+    ctx.topics.forEach((t) => (t.aspects || []).forEach((a) => fromTopics.push(a)));
+    const drop = ctx.topics.map((t) => t.dropAspects).filter(Boolean);
+    const base = d.aspects.filter(([title]) => !drop.some((re) => re.test(title)));
+    const count = n.aspects >= 99 ? base.length : Math.max(4, n.aspects - Math.floor(fromTopics.length / 2));
+    return fromTopics.concat(base.slice(0, count));
+  }
+
+  function standardList(d, ctx, n) {
+    const drop = ctx.topics.map((t) => t.dropStandards).filter(Boolean);
+    const base = d.standards.filter((x) => !drop.some((re) => re.test(x))).slice(0, n.standards);
+    ctx.topics.forEach((t) => (t.standards || []).forEach((x) => base.push(x)));
+    return base;
   }
 
   function workflow(d, s, agent) {
+    const brief = 'Fasse meine Idee zuerst als kurze Projektbeschreibung zusammen (Ziel, Kernfunktionen, Rahmenbedingungen), damit wir sicher dasselbe meinen.';
     if (agent) {
       const steps = [
-        'Verschaffe dir zuerst einen Überblick über das bestehende Projekt (Dateien, Abhängigkeiten). Ist der Ordner leer, lege eine saubere Grundstruktur an.',
+        brief,
+        'Verschaffe dir einen Überblick über das bestehende Projekt (Dateien, Abhängigkeiten). Ist der Ordner leer, lege eine saubere Grundstruktur an.',
         'Schreibe einen kurzen Umsetzungsplan und arbeite ihn danach selbstständig ab.',
         'Setze alles in kleinen, überprüfbaren Schritten um und teste nach jedem Schritt (starten, bauen, Tests ausführen).',
         'Behebe auftretende Fehler selbst, bevor du weitermachst.'
       ];
-      if (s.selfcheck) steps.push('Prüfe das Ergebnis am Ende gegen die Qualitätsstandards und bessere Lücken nach.');
+      if (s.selfcheck) steps.push('Prüfe das Ergebnis am Ende gegen meine Idee und die Qualitätsstandards und bessere Lücken nach.');
       steps.push('Fasse zum Schluss zusammen: was gebaut wurde, wie man es startet und was noch offen ist.');
       return steps;
     }
-    const steps = ['Analysiere meine Idee und fasse in 2–3 Sätzen zusammen, wie du sie verstanden hast.'];
+    const steps = [brief];
     if (s.clarify) steps.push('Stelle mir deine Rückfragen (siehe unten) und warte auf meine Antworten.');
     if (s.plan) steps.push('Erstelle einen klaren Plan mit nummerierten Schritten, bevor du ins Detail gehst.');
     steps.push('Arbeite die Punkte aus „Was du abdecken musst“ der Reihe nach ab.');
     if (d.build) steps.push('Liefere die Umsetzung in sinnvollen Etappen. Jede Etappe endet mit etwas, das ich ausprobieren kann.');
-    if (s.selfcheck) steps.push('Prüfe dein Ergebnis vor dem Absenden gegen die Qualitätsstandards und schließe Lücken.');
+    if (s.selfcheck) steps.push('Prüfe dein Ergebnis vor dem Absenden gegen meine Idee und die Qualitätsstandards und schließe Lücken.');
     steps.push('Schließe mit dem konkreten nächsten Schritt, den ich sofort machen kann.');
     return steps;
   }
 
-  function outputList(d, s, n) {
-    const out = d.deliverables.slice(0, n.deliver);
+  function outputList(d, ctx, s, n) {
+    const local = ctx.topics.some((t) => t.localOnly);
+    let out = d.deliverables.slice(0, n.deliver);
+    if (local) {
+      out = out.map((x) => x.replace(/,? und zum Veröffentlichen| und Veröffentlichen/g, '').replace(/zum lokalen Starten$/, 'zum lokalen Starten (am besten per Doppelklick)'));
+    }
     out.push('Gliedere die Antwort mit klaren Überschriften, nummerierten Schritten und kurzen Absätzen.');
     if (d.code) out.push('Code steht in Codeblöcken mit Sprachangabe; über jedem Block steht der Dateipfad.');
     if (s.detail === 'maximal') out.push('Beende jede größere Etappe mit einer kurzen Checkliste zum Abhaken.');
@@ -231,8 +368,10 @@ PG.engine = (function () {
     return out;
   }
 
-  function rulesList(d, facts, s) {
+  function rulesList(d, ctx, s) {
+    const facts = ctx.facts;
     const rules = [ANSWER_LANG[s.answerLang], LEVEL[s.level].rule];
+    if (s.dictated) rules.push('Meine Idee ist diktiert. Interpretiere offensichtlich falsch erkannte Wörter sinnvoll, statt sie wörtlich zu nehmen.');
     rules.push(s.clarify
       ? 'Wenn nach meinen Antworten noch etwas offen ist, triff eine sinnvolle Annahme und markiere sie mit [Annahme].'
       : 'Wenn Informationen fehlen, triff eine sinnvolle Annahme, markiere sie mit [Annahme] und arbeite weiter, statt nachzufragen.');
@@ -248,19 +387,26 @@ PG.engine = (function () {
     return rules;
   }
 
-  function clarifyText(d, facts) {
-    const known = { tech: facts.tech.length > 0, platform: facts.platforms.length > 0, audience: !!facts.audience, refs: facts.refs.length > 0 };
-    const qs = d.clarify.filter((c) => !c.skip || !known[c.skip]).map((c) => c.q);
+  function clarifyText(d, ctx) {
+    const facts = ctx.facts;
+    const known = {
+      tech: facts.tech.length > 0, platform: facts.platforms.length > 0, audience: !!facts.audience,
+      refs: facts.refs.length > 0, local: ctx.topics.some((t) => t.localOnly)
+    };
+    const all = [];
+    ctx.topics.forEach((t) => (t.clarify || []).forEach((c) => all.push(c)));
+    d.clarify.forEach((c) => all.push(c));
+    const qs = all.filter((c) => !c.skip || !known[c.skip]).map((c) => c.q).slice(0, 6);
     return 'Stelle mir zuerst 3–5 kurze, gezielte Rückfragen zu den Punkten, die das Ergebnis am stärksten beeinflussen. Gute Kandidaten:\n'
       + bullets(qs)
       + '\n\nWarte auf meine Antworten, bevor du mit der eigentlichen Arbeit beginnst. Wenn ich „Leg los“ schreibe, triff die offenen Entscheidungen selbst.';
   }
 
   function startText(s, agent) {
-    if (s.clarify) return 'Beginne jetzt mit deiner kurzen Zusammenfassung und deinen Rückfragen.';
-    if (agent) return 'Beginne jetzt mit der Bestandsaufnahme des Projekts.';
-    if (s.plan) return 'Beginne jetzt mit deiner Zusammenfassung und dem Plan.';
-    return 'Beginne jetzt direkt mit der Umsetzung.';
+    if (s.clarify) return 'Beginne jetzt mit deiner kurzen Projektbeschreibung und deinen Rückfragen.';
+    if (agent) return 'Beginne jetzt mit der Projektbeschreibung und der Bestandsaufnahme des Projekts.';
+    if (s.plan) return 'Beginne jetzt mit deiner Projektbeschreibung und dem Plan.';
+    return 'Beginne jetzt mit deiner Projektbeschreibung und dann direkt mit der Umsetzung.';
   }
 
   /* ---------- Zusammenbau ---------- */
@@ -277,30 +423,37 @@ PG.engine = (function () {
     const idea = cleanIdea(rawIdea);
     const det = detect(idea);
     const forced = s.domain && s.domain !== 'auto';
-    const d = forced ? byId(s.domain) : det.primary;
+    const base = forced ? byId(s.domain) : det.primary;
     let second = forced
-      ? (det.primary.id !== d.id && det.primary.id !== 'general' && det.score >= 3 ? det.primary : null)
+      ? (det.primary.id !== base.id && det.primary.id !== 'general' ? det.primary : det.secondary)
       : det.secondary;
-    if (second && second.id === d.id) second = null;
+    if (second && second.id === base.id) second = null;
 
     const facts = extract(idea);
+    const topics = detectTopics(idea, base.id);
+    const tool = TOOL_HINT.test(idea) || topics.some((t) => t.tool);
+    const d = tool && base.variants && base.variants.tool ? Object.assign({}, base, base.variants.tool) : base;
     if (!facts.scope && d.id === 'game' && facts.refs.some((r) => BIG_GAMES.test(r))) facts.scope = 'large';
     if (s.tech.trim()) facts.tech = uniq([s.tech.trim(), ...facts.tech]);
     if (s.audience.trim()) facts.audience = s.audience.trim();
+
+    // Die Projektzeile nur verwenden, wenn sie zum gewählten Bereich passt
+    const phrase = det.artifact && det.artifact.domain === d.id ? projectPhrase(det.artifact) : '';
+    const ctx = { facts, second, topics, phrase };
 
     const n = DETAIL[s.detail];
     const agent = s.target === 'agent' && !!d.code;
     const xml = s.format === 'xml';
 
     const sections = [
-      { tag: 'rolle', title: 'Deine Rolle', body: roleText(d, second, facts) },
-      { tag: 'idee', title: 'Meine Idee', body: ideaText(idea, d, second, facts, s, xml) },
-      { tag: 'auftrag', title: 'Dein Auftrag', body: missionText(d, facts, s, agent) },
-      { tag: 'inhalte', title: 'Was du abdecken musst', body: aspectsText(d, n.aspects) },
-      { tag: 'qualitaet', title: 'Qualitätsstandards', body: bullets(d.standards.slice(0, n.standards)) },
+      { tag: 'rolle', title: 'Deine Rolle', body: roleText(d, ctx) },
+      { tag: 'projekt', title: 'Mein Projekt', body: ideaText(idea, d, ctx, s, xml) },
+      { tag: 'auftrag', title: 'Dein Auftrag', body: missionText(d, ctx, agent) },
+      { tag: 'inhalte', title: 'Was du abdecken musst', body: numbered(aspectList(d, ctx, n).map(([title, text]) => `**${title}:** ${text}`)) },
+      { tag: 'qualitaet', title: 'Qualitätsstandards', body: bullets(standardList(d, ctx, n)) },
       { tag: 'vorgehen', title: 'Vorgehen', body: numbered(workflow(d, s, agent)) },
-      { tag: 'ausgabe', title: 'Ausgabeformat', body: bullets(outputList(d, s, n)) },
-      { tag: 'regeln', title: 'Regeln', body: bullets(rulesList(d, facts, s)) }
+      { tag: 'ausgabe', title: 'Ausgabeformat', body: bullets(outputList(d, ctx, s, n)) },
+      { tag: 'regeln', title: 'Regeln', body: bullets(rulesList(d, ctx, s)) }
     ];
     if (n.pitfalls) {
       sections.push({ tag: 'fehler', title: 'Typische Fehler, die du vermeiden sollst', body: bullets(d.pitfalls.slice(0, n.pitfalls)) });
@@ -315,7 +468,7 @@ PG.engine = (function () {
         ])
       });
     }
-    if (s.clarify) sections.push({ tag: 'rueckfragen', title: 'Bevor du startest', body: clarifyText(d, facts) });
+    if (s.clarify) sections.push({ tag: 'rueckfragen', title: 'Bevor du startest', body: clarifyText(d, ctx) });
     sections.push({ tag: 'start', title: 'Los geht’s', body: startText(s, agent) });
 
     const text = render(sections, s.format);

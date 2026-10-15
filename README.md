@@ -50,8 +50,8 @@ schaltet die Seite automatisch auf Whisper um. Beim ersten Klick fragt der Brows
 | --- | --- |
 | `index.html` | Seitenstruktur |
 | `css/style.css` | Design („Bauplan“-Look, Hell- und Dunkelmodus) |
-| `js/domains.js` | Wissensbasis: Rollen, Themen, Standards und Erkennungswörter je Bereich |
-| `js/engine.js` | Analyse der Idee und Zusammenbau des Master-Prompts |
+| `js/domains.js` | Wissensbasis: Rollen, Themen, Standards und Erkennungswörter je Bereich, dazu Querschnittsthemen (Download, MP3, „nur lokal“, Login, KI …) |
+| `js/engine.js` | Analyse der Idee (erst *was* gebaut wird, dann das Thema) und Zusammenbau des Master-Prompts |
 | `js/speech.js` | Spracheingabe über den Browser-Dienst |
 | `js/speech-local.js`, `js/whisper-worker.js` | Lokale Spracheingabe mit Whisper (Pausenerkennung, Modell im Hintergrund) |
 | `js/app.js` | Bedienung, Einstellungen, Verlauf |

@@ -46,6 +46,7 @@
   let settings = Object.assign({}, DEFAULTS, load(STORE.settings, {}));
   let history = load(STORE.history, []);
   let current = null;        // { text, meta, idea, date }
+  let dictated = load('pg.draftDictated', false); // Idee (teilweise) gesprochen?
   let generatedFrom = null;  // Idee, aus der der aktuelle Prompt stammt
 
   /* ---------- Hilfen ---------- */
@@ -140,6 +141,7 @@
     const words = countWords(el.idea.value);
     el.ideaCount.textContent = `${fmt.format(words)} ${words === 1 ? 'Wort' : 'Wörter'}`;
     save(STORE.draft, el.idea.value);
+    if (!el.idea.value.trim() && dictated) { dictated = false; save('pg.draftDictated', false); }
     clearTimeout(guessTimer);
     guessTimer = setTimeout(updateGuess, 250);
     el.stale.hidden = !current || el.idea.value.trim() === generatedFrom;
@@ -160,6 +162,8 @@
     b.textContent = label;
     b.addEventListener('click', () => {
       el.idea.value = text;
+      dictated = false;
+      save('pg.draftDictated', false);
       onIdeaChange();
       updateGuess();
       el.idea.focus();
@@ -273,6 +277,8 @@
     if (sentenceStart) text = text.charAt(0).toUpperCase() + text.slice(1);
     const glue = cur && !/\s$/.test(cur) && !/^[.,!?;:\n]/.test(text) ? ' ' : '';
     el.idea.value = cur + glue + text;
+    dictated = true;
+    save('pg.draftDictated', true);
     el.idea.scrollTop = el.idea.scrollHeight;
     onIdeaChange();
   }
@@ -405,7 +411,7 @@
       }
       return;
     }
-    const result = engine.build(idea, settings);
+    const result = engine.build(idea, Object.assign({}, settings, { dictated }));
     const date = options.keepDate && current ? current.date : Date.now();
     current = { text: result.text, meta: result.meta, idea, date };
     generatedFrom = idea;
