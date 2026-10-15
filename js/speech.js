@@ -16,7 +16,6 @@ PG.speech = (function () {
     let rec = null;
     let wanted = false;
     let failure = null; // letzter harter Fehler, bleibt nach dem Ende sichtbar
-    let networkErrors = 0;
     let deadStarts = 0; // Sitzungen, die enden, ohne je gestartet zu sein
     let started = false;
     let lang = 'de-DE';
@@ -40,7 +39,6 @@ PG.speech = (function () {
           if (result.isFinal) handlers.onFinal(text);
           else interim += text;
         }
-        networkErrors = 0;
         handlers.onInterim(interim);
       };
 
@@ -57,8 +55,9 @@ PG.speech = (function () {
           case 'language-not-supported':
             fail('lang'); return;
           case 'network':
-            networkErrors++;
-            if (networkErrors > 3) fail('network');
+            // Browser erreicht seinen Erkennungsdienst nicht (z. B. Opera, Brave) – sofort melden,
+            // damit die App auf die lokale Erkennung umschalten kann
+            fail('network');
             return;
           default:
             return;
@@ -127,7 +126,6 @@ PG.speech = (function () {
         if (wanted) return;
         wanted = true;
         failure = null;
-        networkErrors = 0;
         deadStarts = 0;
         setup();
         try { rec.start(); } catch (_) { /* läuft schon */ }

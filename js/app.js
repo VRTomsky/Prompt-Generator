@@ -5,12 +5,12 @@
   const $ = (id) => document.getElementById(id);
   const { engine, speech, domains } = PG;
 
-  const STORE = { settings: 'pg.settings', draft: 'pg.draft', history: 'pg.history' };
+  const STORE = { settings: 'pg.settings', draft: 'pg.draft', history: 'pg.history', nativeFailed: 'pg.nativeSpeechFailed' };
   const DEFAULTS = {
     domain: 'auto', level: 'anfaenger', detail: 'ausfuehrlich', target: 'chat', format: 'markdown',
     answerLang: 'de', clarify: true, plan: true, selfcheck: true,
     tech: '', audience: '', tone: '', must: '', avoid: '',
-    speechLang: 'de-DE', spokenPunct: false
+    speechLang: 'de-DE', spokenPunct: false, speechEngine: 'auto', localModel: 'base'
   };
   const EXAMPLES = [
     ['Open-World-Spiel', 'Ich will ein Open-World-Spiel wie GTA 6 bauen. Man fährt durch eine große Stadt, erledigt Missionen für verschiedene Auftraggeber und kann Autos klauen und tunen. Am liebsten in Unity für den PC.'],
@@ -22,8 +22,11 @@
 
   const el = {
     idea: $('idea'), interim: $('interim'), ideaCount: $('ideaCount'), clearIdea: $('clearIdea'),
-    micBtn: $('micBtn'), micLabel: $('micLabel'), micStatus: $('micStatus'), micSr: $('micSr'),
-    speechLang: $('speechLang'), spokenPunct: $('spokenPunct'), examples: $('examples'),
+    micBtn: $('micBtn'), micLabel: $('micLabel'), micStatus: $('micStatus'), micMeter: $('micMeter'),
+    micMsg: $('micMsg'), micProgress: $('micProgress'), micOptions: $('micOptions'), micSettingsBtn: $('micSettingsBtn'),
+    speechLang: $('speechLang'), speechEngine: $('speechEngine'), localModel: $('localModel'),
+    modelField: $('modelField'), punctField: $('punctField'), engineHint: $('engineHint'),
+    spokenPunct: $('spokenPunct'), examples: $('examples'),
     chips: $('domainChips'), tune: $('tune'), generate: $('generateBtn'),
     sheet: $('sheet'), sheetBody: $('sheetBody'), empty: $('sheetEmpty'), output: $('output'),
     copy: $('copyBtn'), download: $('downloadBtn'), stale: $('staleBtn'),
@@ -114,6 +117,8 @@
     ['clarify', 'plan', 'selfcheck'].forEach((name) => { document.querySelector(`input[name="${name}"]`).checked = !!settings[name]; });
     ['tech', 'audience', 'tone', 'must', 'avoid'].forEach((name) => { document.querySelector(`input[name="${name}"]`).value = settings[name] || ''; });
     el.speechLang.value = settings.speechLang;
+    el.speechEngine.value = settings.speechEngine;
+    el.localModel.value = settings.localModel;
     el.spokenPunct.checked = !!settings.spokenPunct;
     const filled = ['tech', 'audience', 'tone', 'must', 'avoid'].some((k) => (settings[k] || '').trim());
     if (filled) el.tune.open = true;
@@ -127,11 +132,6 @@
     settings[t.name] = t.type === 'checkbox' ? t.checked : t.value;
     persist();
     refreshIfShown(t.type === 'text' ? 300 : 0);
-  });
-  el.speechLang.addEventListener('change', () => {
-    settings.speechLang = el.speechLang.value;
-    persist();
-    if (mic) mic.setLang(settings.speechLang);
   });
   el.spokenPunct.addEventListener('change', () => { settings.spokenPunct = el.spokenPunct.checked; persist(); });
 
@@ -168,32 +168,106 @@
   });
 
   /* ---------- Spracheingabe ---------- */
-  const MIC_STATUS = {
-    idle: 'Klick aufs Mikrofon und erzähl einfach los.',
-    listening: 'Ich höre zu … Klick nochmal, wenn du fertig bist.',
+  // Zwei Wege: der Erkennungsdienst des Browsers (live, nur echtes Chrome/Edge/Safari)
+  // oder Whisper lokal im Browser (funktioniert überall, Modell wird einmal geladen).
+  const MIC_MSG = {
     blocked: 'Mikrofon blockiert. Erlaube den Zugriff über das Symbol links in der Adressleiste und versuch es erneut.',
     nomic: 'Kein Mikrofon gefunden. Schließ eins an und versuch es erneut.',
-    network: 'Die Spracherkennung braucht Internet. Prüf deine Verbindung und versuch es erneut.',
-    lang: 'Diese Sprache wird von deinem Browser nicht erkannt. Wähl unten eine andere.',
-    unsupported: 'Spracheingabe klappt in Chrome und Edge. Tipp: Windows-Taste + H startet die Windows-Diktierfunktion in jedem Textfeld.',
+    network: 'Der Erkennungsdienst deines Browsers ist nicht erreichbar. Stell die Erkennung über das Regler-Symbol auf „Lokal mit Whisper“.',
+    lang: 'Diese Sprache erkennt dein Browser nicht. Wähl eine andere oder stell die Erkennung auf „Lokal mit Whisper“.',
+    modelerror: 'Das Sprachmodell konnte nicht geladen werden. Prüf deine Verbindung und versuch es erneut.',
+    unsupported: 'Dein Browser unterstützt keine Spracheingabe. Tipp: Windows-Taste + H startet die Windows-Diktierfunktion in jedem Textfeld.',
     file: 'Fürs Mikrofon die Seite über start.bat oder GitHub Pages öffnen – als lokale Datei blockiert der Browser den Zugriff.'
   };
+  const ENGINE_HINT = {
+    local: 'Whisper läuft direkt auf deinem Gerät, die Aufnahme verlässt den Browser nicht. Das Sprachmodell wird nur beim ersten Mal geladen, danach geht es sofort.',
+    browser: 'Live-Mitschrift über den Erkennungsdienst deines Browsers (Google bzw. Microsoft). Klappt nur in echtem Chrome und Edge und braucht Internet.'
+  };
 
-  function setMicState(state) {
-    const listening = state === 'listening';
-    el.micBtn.classList.toggle('live', listening);
-    el.micBtn.setAttribute('aria-pressed', listening);
-    el.micLabel.textContent = listening ? 'Aufnahme stoppen' : 'Reinsprechen';
-    el.micSr.textContent = listening ? 'Spracheingabe stoppen' : 'Spracheingabe starten';
-    el.micStatus.textContent = MIC_STATUS[state] || MIC_STATUS.idle;
-    el.micStatus.classList.toggle('warn', ['blocked', 'nomic', 'network', 'lang', 'unsupported', 'file'].includes(state));
-    if (!listening) el.interim.textContent = '';
+  // Nur diese Browser liefern die eingebaute Erkennung auch wirklich aus.
+  // Opera, Brave, Vivaldi & Co. haben die Schnittstelle, aber keinen Dienst dahinter.
+  function trustedNativeBrowser() {
+    const data = navigator.userAgentData;
+    if (data && data.brands && data.brands.length) {
+      return data.brands.some((b) => b.brand === 'Google Chrome' || b.brand === 'Microsoft Edge');
+    }
+    const ua = navigator.userAgent;
+    if (navigator.brave || /OPR\/|Opera|Vivaldi|YaBrowser|SamsungBrowser/i.test(ua)) return false;
+    if (/Edg\//.test(ua)) return true;
+    return /Safari\//.test(ua) && !/Chrome|Chromium|Android/.test(ua);
+  }
+
+  function resolveEngine() {
+    const native = speech.supported;
+    const local = PG.localSpeech.supported;
+    if (settings.speechEngine === 'browser' && native) return 'browser';
+    if (settings.speechEngine === 'local' && local) return 'local';
+    if (native && trustedNativeBrowser() && !load(STORE.nativeFailed, false)) return 'browser';
+    return local ? 'local' : native ? 'browser' : null;
+  }
+
+  let micEngine = null;
+  let listening = false;
+  let busy = false;
+  let modelPct = null;
+  let recStart = 0;
+  let clock = 0;
+
+  const fmtTime = (ms) => {
+    const sec = Math.floor(ms / 1000);
+    return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  };
+
+  function showMsg(text) {
+    el.micMsg.textContent = text || '';
+    el.micMsg.hidden = !text;
+  }
+
+  function renderMicStatus() {
+    const parts = [];
+    if (listening) parts.push(fmtTime(Date.now() - recStart));
+    if (modelPct != null) parts.push(`Sprachmodell lädt (einmalig) ${modelPct} %`);
+    else if (busy) parts.push('Erkenne Text …');
+    el.micStatus.textContent = parts.join(' · ');
+    el.micProgress.hidden = modelPct == null;
+    if (modelPct != null) el.micProgress.firstElementChild.style.width = `${modelPct}%`;
+  }
+
+  function setListening(on) {
+    listening = on;
+    el.micBtn.classList.toggle('live', on);
+    el.micBtn.setAttribute('aria-pressed', on);
+    el.micLabel.textContent = on ? 'Stopp' : 'Reinsprechen';
+    el.micMeter.hidden = !on;
+    clearInterval(clock);
+    if (on) {
+      recStart = Date.now();
+      clock = setInterval(renderMicStatus, 500);
+    } else {
+      el.interim.textContent = '';
+    }
+    renderMicStatus();
+  }
+
+  function onMicState(state) {
+    if (state === 'listening') { showMsg(''); setListening(true); return; }
+    setListening(false);
+    if (state === 'idle' || state === 'processing') return;
+    // Browser-Dienst nicht erreichbar: automatisch auf Whisper umschalten und weiter aufnehmen
+    if ((state === 'network' || state === 'lang') && micEngine === 'browser' && settings.speechEngine === 'auto' && localMic) {
+      save(STORE.nativeFailed, true);
+      switchEngine('local');
+      toast('Browser-Erkennung nicht erreichbar – ich nutze jetzt die lokale Erkennung.');
+      startMic();
+      return;
+    }
+    showMsg(MIC_MSG[state] || MIC_MSG.modelerror);
   }
 
   function appendSpoken(raw) {
     let text = raw.trim();
     if (!text) return;
-    if (settings.spokenPunct) text = speech.applySpokenPunctuation(text);
+    if (settings.spokenPunct && micEngine === 'browser') text = speech.applySpokenPunctuation(text);
     const cur = el.idea.value;
     const sentenceStart = !cur.trim() || /[.!?]\s*$|\n\s*$/.test(cur);
     if (sentenceStart) text = text.charAt(0).toUpperCase() + text.slice(1);
@@ -203,26 +277,79 @@
     onIdeaChange();
   }
 
-  const mic = speech.create({
+  const micHandlers = (engine) => ({
     onFinal: appendSpoken,
-    onInterim: (t) => { el.interim.textContent = t; },
-    onState: setMicState,
-    onLevel: (v) => el.micBtn.style.setProperty('--lvl', v.toFixed(3))
+    onInterim: (t) => { if (micEngine === engine) el.interim.textContent = t; },
+    onState: (state) => { if (micEngine === engine) onMicState(state); },
+    onLevel: (v) => el.micMeter.style.setProperty('--lvl', v.toFixed(3)),
+    onProgress: (p) => { modelPct = p; renderMicStatus(); },
+    onBusy: (b) => { busy = b; renderMicStatus(); }
+  });
+  const nativeMic = speech.create(micHandlers('browser'));
+  const localMic = PG.localSpeech.create(micHandlers('local'));
+  const activeMic = () => (micEngine === 'local' ? localMic : micEngine === 'browser' ? nativeMic : null);
+
+  function switchEngine(engine) {
+    const old = activeMic();
+    if (old && old.active) old.stop();
+    micEngine = engine;
+    el.micBtn.disabled = !engine;
+    el.punctField.hidden = engine !== 'browser';
+    el.modelField.hidden = engine !== 'local';
+    el.engineHint.textContent = ENGINE_HINT[engine] || '';
+    if (!engine) showMsg(MIC_MSG.unsupported);
+  }
+
+  function startMic() {
+    const mic = activeMic();
+    if (!mic) return;
+    showMsg('');
+    mic.setLang(settings.speechLang);
+    if (micEngine === 'local') mic.setModel(settings.localModel);
+    mic.start();
+  }
+
+  el.micBtn.addEventListener('click', () => {
+    const mic = activeMic();
+    if (!mic) return;
+    if (mic.active) mic.stop();
+    else startMic();
   });
 
-  if (!mic) {
-    el.micBtn.disabled = true;
-    setMicState('unsupported');
-  } else if (location.protocol === 'file:') {
-    setMicState('file');
-  }
-  el.micBtn.addEventListener('click', () => {
-    if (!mic) return;
-    if (mic.active) { mic.stop(); return; }
-    mic.setLang(settings.speechLang);
-    mic.start();
-    el.micStatus.textContent = 'Mikrofon wird gestartet …';
+  // Wer schon einmal gesprochen hat, bekommt das Modell beim Zeigen auf den Knopf vorgewärmt
+  const warmUp = () => {
+    if (micEngine !== 'local' || !localMic) return;
+    localMic.setModel(settings.localModel);
+    localMic.preload();
+  };
+  el.micBtn.addEventListener('pointerenter', warmUp);
+  el.micBtn.addEventListener('focus', warmUp);
+
+  el.micSettingsBtn.addEventListener('click', () => {
+    const open = el.micOptions.hidden;
+    el.micOptions.hidden = !open;
+    el.micSettingsBtn.setAttribute('aria-expanded', open);
   });
+  el.speechLang.addEventListener('change', () => {
+    settings.speechLang = el.speechLang.value;
+    persist();
+    const mic = activeMic();
+    if (mic) mic.setLang(settings.speechLang);
+  });
+  el.speechEngine.addEventListener('change', () => {
+    settings.speechEngine = el.speechEngine.value;
+    persist();
+    showMsg('');
+    switchEngine(resolveEngine());
+  });
+  el.localModel.addEventListener('change', () => {
+    settings.localModel = el.localModel.value;
+    persist();
+    if (localMic) localMic.setModel(settings.localModel);
+  });
+
+  switchEngine(resolveEngine());
+  if (location.protocol === 'file:') showMsg(MIC_MSG.file);
 
   /* ---------- Erzeugen & Anzeigen ---------- */
   function renderOutput(text, animate) {
@@ -413,7 +540,10 @@
     if (!item) return;
     const h = history[Number(item.dataset.index)];
     if (!h) return;
-    settings = Object.assign({}, DEFAULTS, h.settings, { speechLang: settings.speechLang, spokenPunct: settings.spokenPunct });
+    settings = Object.assign({}, DEFAULTS, h.settings, {
+      speechLang: settings.speechLang, spokenPunct: settings.spokenPunct,
+      speechEngine: settings.speechEngine, localModel: settings.localModel
+    });
     persist();
     applySettingsToForm();
     renderChips();

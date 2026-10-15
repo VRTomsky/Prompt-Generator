@@ -34,23 +34,25 @@
             placeholder="Zum Beispiel: Ich will ein Open-World-Spiel wie GTA bauen, in dem man durch eine Stadt fährt und Missionen für verschiedene Auftraggeber erledigt …"></textarea>
           <p class="interim" id="interim" aria-live="polite"></p>
           <div class="idea-tools">
-            <button id="micBtn" class="mic" type="button" aria-pressed="false" aria-describedby="micStatus">
-              <span class="mic-ring" aria-hidden="true"></span>
-              <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+            <button id="micBtn" class="mic" type="button" aria-pressed="false">
+              <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
               <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
-              <span class="sr-only" id="micSr">Spracheingabe starten</span>
+              <span id="micLabel">Reinsprechen</span>
             </button>
-            <div class="mic-text">
-              <strong id="micLabel">Reinsprechen</strong>
-              <span id="micStatus">Klick aufs Mikrofon und erzähl einfach los.</span>
-            </div>
+            <span class="meter" id="micMeter" aria-hidden="true" hidden><i></i><i></i><i></i><i></i><i></i></span>
+            <span class="mic-status" id="micStatus" aria-live="polite"></span>
             <div class="idea-meta">
               <span id="ideaCount">0 Wörter</span>
               <button id="clearIdea" class="text-btn" type="button">Leeren</button>
+              <button id="micSettingsBtn" class="icon-btn small" type="button" aria-expanded="false" aria-controls="micOptions" aria-label="Einstellungen für die Spracheingabe" title="Spracheingabe einstellen">
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h10M18 7h2M4 17h4M12 17h8"/><circle cx="16" cy="7" r="2"/><circle cx="10" cy="17" r="2"/></svg>
+              </button>
             </div>
           </div>
+          <div class="mic-progress" id="micProgress" hidden><span></span></div>
         </div>
-        <div class="mic-options">
+        <p class="mic-msg" id="micMsg" role="alert" hidden></p>
+        <div class="mic-options" id="micOptions" hidden>
           <label class="inline-field">Sprache
             <select id="speechLang">
               <option value="de-DE">Deutsch</option>
@@ -60,7 +62,21 @@
               <option value="en-GB">Englisch (UK)</option>
             </select>
           </label>
-          <label class="check"><input type="checkbox" id="spokenPunct"> Gesagtes „Komma“, „Punkt“ und „neue Zeile“ als Zeichen setzen</label>
+          <label class="inline-field">Erkennung
+            <select id="speechEngine">
+              <option value="auto">Automatisch</option>
+              <option value="local">Lokal mit Whisper (jeder Browser)</option>
+              <option value="browser">Browser-Dienst (nur Chrome und Edge)</option>
+            </select>
+          </label>
+          <label class="inline-field" id="modelField">Genauigkeit
+            <select id="localModel">
+              <option value="base">Schnell (einmalig ca. 80–200 MB)</option>
+              <option value="small">Genau (einmalig ca. 250–400 MB)</option>
+            </select>
+          </label>
+          <label class="check" id="punctField"><input type="checkbox" id="spokenPunct"> Gesagtes „Komma“, „Punkt“, „neue Zeile“ als Zeichen setzen</label>
+          <p class="hint" id="engineHint"></p>
         </div>
         <div class="examples" id="examples">
           <span class="examples-label">Beispiele</span>
@@ -180,6 +196,7 @@
   <script src="js/domains.js"></script>
   <script src="js/engine.js"></script>
   <script src="js/speech.js"></script>
+  <script src="js/speech-local.js"></script>
   <script src="js/app.js"></script>
 </body>
 </html>

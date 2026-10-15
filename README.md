@@ -14,8 +14,8 @@ Beispiel: *„Ich will ein Open-World-Spiel wie GTA 6 bauen …“* wird zu eine
   Sport & Fitness, Daten & Analyse – plus „Sonstiges“ für alles andere.
 - **Automatische Erkennung** von Bereich, Technik (z. B. Unity, React, Blender), Plattform,
   Vorbildern (z. B. GTA, Minecraft), Zielgruppe und Projektgröße.
-- **Spracheingabe** mit Live-Mitschrift, automatischem Neustart nach Sprechpausen und optionalen
-  gesprochenen Satzzeichen („Komma“, „Punkt“, „neue Zeile“). Füllwörter wie „äh“ und „ähm“ werden entfernt.
+- **Spracheingabe** in jedem modernen Browser: lokal mit Whisper oder über den Erkennungsdienst von
+  Chrome/Edge (siehe unten). Füllwörter wie „äh“ und „ähm“ werden entfernt.
 - **Feinschliff**: Erfahrungslevel, Detailgrad, Chat-KI oder Coding-Agent, Markdown oder XML-Tags,
   Antwortsprache, Rückfragen, Plan, Selbstcheck sowie Felder für Technik, Zielgruppe, Stil, Pflicht- und Ausschlusspunkte.
 - Kopieren mit einem Klick, Speichern als `.txt`, Verlauf der letzten 25 Prompts (nur im eigenen Browser).
@@ -31,10 +31,18 @@ weil Browser den Mikrofonzugriff für lokale Dateien sperren.
 
 ## Spracheingabe
 
-- Funktioniert in **Chrome** und **Edge** (Desktop und Android). Firefox unterstützt die Web Speech API nicht –
-  dort hilft unter Windows die eingebaute Diktierfunktion mit **Windows-Taste + H**.
-- Braucht eine Internetverbindung: Chrome schickt die Aufnahme zur Erkennung an Google, Edge an Microsoft.
-- Beim ersten Klick fragt der Browser nach dem Mikrofon – einmal erlauben, fertig.
+Zwei Erkennungswege, die Seite wählt automatisch (änderbar über das Regler-Symbol neben „Reinsprechen“):
+
+- **Lokal mit Whisper** – läuft direkt im Browser über WebGPU (sonst CPU), funktioniert in jedem modernen Browser,
+  auch in Opera, Brave und Firefox. Die Aufnahme verlässt das Gerät nicht. Das Sprachmodell wird beim ersten Mal
+  geladen (Schnell: ca. 80–200 MB, Genau: ca. 250–400 MB) und danach aus dem Browser-Cache genommen.
+  Text erscheint jeweils nach einer kurzen Sprechpause, mit Satzzeichen.
+- **Browser-Dienst** – Live-Mitschrift über die Web Speech API. Klappt nur in echtem **Chrome** und **Edge**,
+  braucht Internet (Chrome schickt die Aufnahme an Google, Edge an Microsoft).
+
+Andere Chromium-Browser (Opera, Brave, Vivaldi …) haben die Web Speech API zwar eingebaut, aber keinen
+Erkennungsdienst dahinter – dort kommt sonst nur der Fehler „network“. Meldet der Browser-Dienst diesen Fehler,
+schaltet die Seite automatisch auf Whisper um. Beim ersten Klick fragt der Browser nach dem Mikrofon – einmal erlauben.
 
 ## Aufbau
 
@@ -44,7 +52,8 @@ weil Browser den Mikrofonzugriff für lokale Dateien sperren.
 | `css/style.css` | Design („Bauplan“-Look, Hell- und Dunkelmodus) |
 | `js/domains.js` | Wissensbasis: Rollen, Themen, Standards und Erkennungswörter je Bereich |
 | `js/engine.js` | Analyse der Idee und Zusammenbau des Master-Prompts |
-| `js/speech.js` | Spracheingabe |
+| `js/speech.js` | Spracheingabe über den Browser-Dienst |
+| `js/speech-local.js`, `js/whisper-worker.js` | Lokale Spracheingabe mit Whisper (Pausenerkennung, Modell im Hintergrund) |
 | `js/app.js` | Bedienung, Einstellungen, Verlauf |
 | `server.js`, `start.bat` | Mini-Webserver für die lokale Nutzung mit Mikrofon |
 
