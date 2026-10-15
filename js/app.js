@@ -1,0 +1,446 @@
+/*
+ * Oberfläche: Eingabe, Spracheingabe, Einstellungen, Ausgabe und Verlauf.
+ */
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const { engine, speech, domains } = PG;
+
+  const STORE = { settings: 'pg.settings', draft: 'pg.draft', history: 'pg.history' };
+  const DEFAULTS = {
+    domain: 'auto', level: 'anfaenger', detail: 'ausfuehrlich', target: 'chat', format: 'markdown',
+    answerLang: 'de', clarify: true, plan: true, selfcheck: true,
+    tech: '', audience: '', tone: '', must: '', avoid: '',
+    speechLang: 'de-DE', spokenPunct: false
+  };
+  const EXAMPLES = [
+    ['Open-World-Spiel', 'Ich will ein Open-World-Spiel wie GTA 6 bauen. Man fährt durch eine große Stadt, erledigt Missionen für verschiedene Auftraggeber und kann Autos klauen und tunen. Am liebsten in Unity für den PC.'],
+    ['Portfolio-Webseite', 'Eine Portfolio-Webseite für meine Blender-Renders und Spieleprojekte. Modern und dunkel, mit Galerie, kurzer Über-mich-Seite und Kontaktformular.'],
+    ['Homegym-Plan', 'Ein Trainingsplan für mein Homegym mit Kurzhanteln, Klimmzugstange und Hantelbank. Viermal pro Woche, Ziel Muskelaufbau, und ich spiele nebenbei Fußball im Verein.'],
+    ['Blender lernen', 'Ich will Blender von null lernen, um eigene 3D-Modelle für meine Spiele zu bauen. Ich habe ungefähr fünf Stunden pro Woche Zeit.'],
+    ['YouTube-Short', 'Ein YouTube-Short über mein Gaming-Setup, witzig und schnell geschnitten, mit einem Hook, der sofort neugierig macht.']
+  ];
+
+  const el = {
+    idea: $('idea'), interim: $('interim'), ideaCount: $('ideaCount'), clearIdea: $('clearIdea'),
+    micBtn: $('micBtn'), micLabel: $('micLabel'), micStatus: $('micStatus'), micSr: $('micSr'),
+    speechLang: $('speechLang'), spokenPunct: $('spokenPunct'), examples: $('examples'),
+    chips: $('domainChips'), tune: $('tune'), generate: $('generateBtn'),
+    sheet: $('sheet'), sheetBody: $('sheetBody'), empty: $('sheetEmpty'), output: $('output'),
+    copy: $('copyBtn'), download: $('downloadBtn'), stale: $('staleBtn'),
+    tbDomain: $('tbDomain'), tbRole: $('tbRole'), tbDetail: $('tbDetail'), tbSize: $('tbSize'), tbDate: $('tbDate'),
+    historyBtn: $('historyBtn'), historyCount: $('historyCount'), historyDialog: $('historyDialog'),
+    historyList: $('historyList'), clearHistory: $('clearHistory'), toast: $('toast')
+  };
+
+  /* ---------- Speicher (fehlertolerant) ---------- */
+  function load(key, fallback) {
+    try { const v = localStorage.getItem(key); return v ? JSON.parse(v) : fallback; } catch (_) { return fallback; }
+  }
+  function save(key, value) {
+    try { localStorage.setItem(key, JSON.stringify(value)); } catch (_) { /* privater Modus o. ä. */ }
+  }
+
+  let settings = Object.assign({}, DEFAULTS, load(STORE.settings, {}));
+  let history = load(STORE.history, []);
+  let current = null;        // { text, meta, idea, date }
+  let generatedFrom = null;  // Idee, aus der der aktuelle Prompt stammt
+
+  /* ---------- Hilfen ---------- */
+  const esc = (s) => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const fmt = new Intl.NumberFormat('de-DE');
+  const countWords = (t) => (t.trim().match(/\S+/g) || []).length;
+
+  let toastTimer = 0;
+  function toast(msg) {
+    el.toast.textContent = msg;
+    el.toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => el.toast.classList.remove('show'), 2600);
+  }
+
+  /* ---------- Bereichs-Chips ---------- */
+  function renderChips() {
+    const items = [{ id: 'auto', label: 'Automatisch' }].concat(domains.map((d) => ({ id: d.id, label: d.label })));
+    el.chips.innerHTML = items.map((d) => `
+      <button type="button" class="chip${d.id === 'auto' ? ' chip-auto' : ''}" role="radio" data-domain="${d.id}"
+        aria-checked="${settings.domain === d.id}" tabindex="${settings.domain === d.id ? 0 : -1}">
+        ${esc(d.label)}${d.id === 'auto' ? '<span class="guess" id="autoGuess"></span>' : ''}
+      </button>`).join('');
+    updateGuess();
+  }
+
+  function selectDomain(id, focus) {
+    settings.domain = id;
+    el.chips.querySelectorAll('.chip').forEach((c) => {
+      const on = c.dataset.domain === id;
+      c.setAttribute('aria-checked', on);
+      c.tabIndex = on ? 0 : -1;
+      if (on && focus) c.focus();
+    });
+    persist();
+    refreshIfShown();
+  }
+
+  el.chips.addEventListener('click', (e) => {
+    const chip = e.target.closest('.chip');
+    if (chip) selectDomain(chip.dataset.domain);
+  });
+  el.chips.addEventListener('keydown', (e) => {
+    const keys = ['ArrowRight', 'ArrowDown', 'ArrowLeft', 'ArrowUp'];
+    if (!keys.includes(e.key)) return;
+    e.preventDefault();
+    const chips = [...el.chips.querySelectorAll('.chip')];
+    const i = chips.findIndex((c) => c.dataset.domain === settings.domain);
+    const next = (i + (e.key === 'ArrowRight' || e.key === 'ArrowDown' ? 1 : -1) + chips.length) % chips.length;
+    selectDomain(chips[next].dataset.domain, true);
+  });
+
+  let guessTimer = 0;
+  function updateGuess() {
+    const guess = $('autoGuess');
+    if (!guess) return;
+    const text = el.idea.value.trim();
+    if (countWords(text) < 3) { guess.textContent = ''; return; }
+    const det = engine.detect(text);
+    guess.textContent = det.primary.id === 'general' ? '' : ` · ${det.primary.label}`;
+  }
+
+  /* ---------- Einstellungen ---------- */
+  function applySettingsToForm() {
+    ['level', 'detail', 'target', 'format', 'answerLang'].forEach((name) => {
+      const input = document.querySelector(`input[name="${name}"][value="${settings[name]}"]`);
+      if (input) input.checked = true;
+    });
+    ['clarify', 'plan', 'selfcheck'].forEach((name) => { document.querySelector(`input[name="${name}"]`).checked = !!settings[name]; });
+    ['tech', 'audience', 'tone', 'must', 'avoid'].forEach((name) => { document.querySelector(`input[name="${name}"]`).value = settings[name] || ''; });
+    el.speechLang.value = settings.speechLang;
+    el.spokenPunct.checked = !!settings.spokenPunct;
+    const filled = ['tech', 'audience', 'tone', 'must', 'avoid'].some((k) => (settings[k] || '').trim());
+    if (filled) el.tune.open = true;
+  }
+
+  function persist() { save(STORE.settings, settings); }
+
+  el.tune.addEventListener('input', (e) => {
+    const t = e.target;
+    if (!t.name) return;
+    settings[t.name] = t.type === 'checkbox' ? t.checked : t.value;
+    persist();
+    refreshIfShown(t.type === 'text' ? 300 : 0);
+  });
+  el.speechLang.addEventListener('change', () => {
+    settings.speechLang = el.speechLang.value;
+    persist();
+    if (mic) mic.setLang(settings.speechLang);
+  });
+  el.spokenPunct.addEventListener('change', () => { settings.spokenPunct = el.spokenPunct.checked; persist(); });
+
+  /* ---------- Idee-Feld ---------- */
+  function onIdeaChange() {
+    const words = countWords(el.idea.value);
+    el.ideaCount.textContent = `${fmt.format(words)} ${words === 1 ? 'Wort' : 'Wörter'}`;
+    save(STORE.draft, el.idea.value);
+    clearTimeout(guessTimer);
+    guessTimer = setTimeout(updateGuess, 250);
+    el.stale.hidden = !current || el.idea.value.trim() === generatedFrom;
+  }
+  el.idea.addEventListener('input', onIdeaChange);
+
+  el.clearIdea.addEventListener('click', () => {
+    if (!el.idea.value) return;
+    el.idea.value = '';
+    onIdeaChange();
+    el.idea.focus();
+  });
+
+  EXAMPLES.forEach(([label, text]) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.className = 'example';
+    b.textContent = label;
+    b.addEventListener('click', () => {
+      el.idea.value = text;
+      onIdeaChange();
+      updateGuess();
+      el.idea.focus();
+    });
+    el.examples.appendChild(b);
+  });
+
+  /* ---------- Spracheingabe ---------- */
+  const MIC_STATUS = {
+    idle: 'Klick aufs Mikrofon und erzähl einfach los.',
+    listening: 'Ich höre zu … Klick nochmal, wenn du fertig bist.',
+    blocked: 'Mikrofon blockiert. Erlaube den Zugriff über das Symbol links in der Adressleiste und versuch es erneut.',
+    nomic: 'Kein Mikrofon gefunden. Schließ eins an und versuch es erneut.',
+    network: 'Die Spracherkennung braucht Internet. Prüf deine Verbindung und versuch es erneut.',
+    lang: 'Diese Sprache wird von deinem Browser nicht erkannt. Wähl unten eine andere.',
+    unsupported: 'Spracheingabe klappt in Chrome und Edge. Tipp: Windows-Taste + H startet die Windows-Diktierfunktion in jedem Textfeld.',
+    file: 'Fürs Mikrofon die Seite über start.bat oder GitHub Pages öffnen – als lokale Datei blockiert der Browser den Zugriff.'
+  };
+
+  function setMicState(state) {
+    const listening = state === 'listening';
+    el.micBtn.classList.toggle('live', listening);
+    el.micBtn.setAttribute('aria-pressed', listening);
+    el.micLabel.textContent = listening ? 'Aufnahme stoppen' : 'Reinsprechen';
+    el.micSr.textContent = listening ? 'Spracheingabe stoppen' : 'Spracheingabe starten';
+    el.micStatus.textContent = MIC_STATUS[state] || MIC_STATUS.idle;
+    el.micStatus.classList.toggle('warn', ['blocked', 'nomic', 'network', 'lang', 'unsupported', 'file'].includes(state));
+    if (!listening) el.interim.textContent = '';
+  }
+
+  function appendSpoken(raw) {
+    let text = raw.trim();
+    if (!text) return;
+    if (settings.spokenPunct) text = speech.applySpokenPunctuation(text);
+    const cur = el.idea.value;
+    const sentenceStart = !cur.trim() || /[.!?]\s*$|\n\s*$/.test(cur);
+    if (sentenceStart) text = text.charAt(0).toUpperCase() + text.slice(1);
+    const glue = cur && !/\s$/.test(cur) && !/^[.,!?;:\n]/.test(text) ? ' ' : '';
+    el.idea.value = cur + glue + text;
+    el.idea.scrollTop = el.idea.scrollHeight;
+    onIdeaChange();
+  }
+
+  const mic = speech.create({
+    onFinal: appendSpoken,
+    onInterim: (t) => { el.interim.textContent = t; },
+    onState: setMicState,
+    onLevel: (v) => el.micBtn.style.setProperty('--lvl', v.toFixed(3))
+  });
+
+  if (!mic) {
+    el.micBtn.disabled = true;
+    setMicState('unsupported');
+  } else if (location.protocol === 'file:') {
+    setMicState('file');
+  }
+  el.micBtn.addEventListener('click', () => {
+    if (!mic) return;
+    if (mic.active) { mic.stop(); return; }
+    mic.setLang(settings.speechLang);
+    mic.start();
+    el.micStatus.textContent = 'Mikrofon wird gestartet …';
+  });
+
+  /* ---------- Erzeugen & Anzeigen ---------- */
+  function renderOutput(text, animate) {
+    const lines = text.split('\n');
+    el.output.innerHTML = lines.map((line, i) => {
+      let cls = 'ln';
+      let html;
+      if (/^# /.test(line)) {
+        cls += ' h';
+        html = '<span class="mk">#</span> ' + esc(line.slice(2));
+      } else if (/^<\/?[a-z_]+>$/.test(line)) {
+        cls += ' tag';
+        html = esc(line);
+      } else if (line === '"""') {
+        cls += ' quote';
+        html = esc(line);
+      } else {
+        html = esc(line);
+        const list = html.match(/^(\d+\.|-) /);
+        if (list) {
+          cls += list[1] === '-' ? ' li' : ' li num';
+          html = `<span class="mk">${list[1]}</span> ` + html.slice(list[0].length);
+        }
+        html = html.replace(/\*\*(.+?)\*\*/g, '<span class="mk">**</span><b>$1</b><span class="mk">**</span>');
+      }
+      return `<span class="${cls}" style="--i:${Math.min(i, 60)}">${html}</span>`;
+    }).join('');
+    el.output.classList.toggle('plot', !!animate);
+    el.output.hidden = false;
+    el.empty.hidden = true;
+    el.copy.disabled = false;
+    el.download.disabled = false;
+  }
+
+  function renderMeta(meta, date) {
+    el.tbDomain.textContent = meta.domain.field + (meta.secondary ? ` + ${meta.secondary.label}` : '');
+    el.tbRole.textContent = meta.role;
+    el.tbDetail.textContent = meta.detail;
+    el.tbSize.textContent = `${fmt.format(meta.words)} Wörter · ≈ ${fmt.format(meta.tokens)} Tokens`;
+    el.tbDate.textContent = new Date(date).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  }
+
+  function generate(opts) {
+    const options = opts || {};
+    const idea = (options.idea != null ? options.idea : el.idea.value).trim();
+    if (!idea) {
+      if (!options.silent) {
+        toast('Schreib oder sprich zuerst deine Idee.');
+        el.idea.focus();
+        el.idea.parentElement.classList.remove('nudge');
+        void el.idea.parentElement.offsetWidth;
+        el.idea.parentElement.classList.add('nudge');
+      }
+      return;
+    }
+    const result = engine.build(idea, settings);
+    const date = options.keepDate && current ? current.date : Date.now();
+    current = { text: result.text, meta: result.meta, idea, date };
+    generatedFrom = idea;
+    renderOutput(result.text, !options.silent);
+    renderMeta(result.meta, date);
+    el.stale.hidden = true;
+
+    if (!options.silent) {
+      addHistory(current);
+      if (countWords(idea) < 6) toast('Tipp: Je mehr Details du nennst, desto genauer wird der Prompt.');
+      if (window.matchMedia('(max-width: 999px)').matches) el.sheet.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      el.sheetBody.scrollTop = 0;
+    }
+  }
+
+  let refreshTimer = 0;
+  function refreshIfShown(delay) {
+    if (!current) return;
+    clearTimeout(refreshTimer);
+    refreshTimer = setTimeout(() => {
+      // Optionen geändert: Prompt mit der Idee neu bauen, aus der er stammt
+      const scroll = el.sheetBody.scrollTop;
+      generate({ silent: true, keepDate: true, idea: generatedFrom });
+      el.stale.hidden = el.idea.value.trim() === generatedFrom;
+      el.sheetBody.scrollTop = scroll;
+      if (history[0] && history[0].date === current.date) {
+        history[0] = snapshot(current);
+        save(STORE.history, history);
+      }
+    }, delay || 0);
+  }
+
+  el.generate.addEventListener('click', () => generate());
+  el.stale.addEventListener('click', () => generate());
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); generate(); }
+  });
+
+  /* ---------- Kopieren & Speichern ---------- */
+  async function copyText(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch (_) {
+      const ta = document.createElement('textarea');
+      ta.value = text;
+      ta.setAttribute('readonly', '');
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.select();
+      let ok = false;
+      try { ok = document.execCommand('copy'); } catch (__) { ok = false; }
+      ta.remove();
+      return ok;
+    }
+  }
+
+  el.copy.addEventListener('click', async () => {
+    if (!current) return;
+    const ok = await copyText(current.text);
+    if (ok) {
+      el.copy.textContent = 'Kopiert';
+      el.copy.classList.add('done');
+      setTimeout(() => { el.copy.textContent = 'Kopieren'; el.copy.classList.remove('done'); }, 1800);
+      toast('Kopiert – jetzt in deine KI einfügen.');
+    } else {
+      toast('Kopieren hat nicht geklappt. Markier den Text und drück Strg + C.');
+    }
+  });
+
+  el.download.addEventListener('click', () => {
+    if (!current) return;
+    const day = new Date(current.date).toISOString().slice(0, 10);
+    const blob = new Blob([current.text], { type: 'text/plain;charset=utf-8' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `master-prompt-${current.meta.domain.id}-${day}.txt`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    toast('Gespeichert als Textdatei.');
+  });
+
+  /* ---------- Verlauf ---------- */
+  function snapshot(entry) {
+    return {
+      date: entry.date, idea: entry.idea, text: entry.text,
+      domainId: entry.meta.domain.id, secondaryId: entry.meta.secondary ? entry.meta.secondary.id : null,
+      words: entry.meta.words, tokens: entry.meta.tokens, role: entry.meta.role, detail: entry.meta.detail,
+      settings: Object.assign({}, settings)
+    };
+  }
+
+  function addHistory(entry) {
+    if (history[0] && history[0].idea === entry.idea) history.shift();
+    history.unshift(snapshot(entry));
+    history = history.slice(0, 25);
+    save(STORE.history, history);
+    renderHistoryCount();
+  }
+
+  function renderHistoryCount() {
+    el.historyCount.textContent = history.length ? history.length : '';
+  }
+
+  function renderHistory() {
+    if (!history.length) {
+      el.historyList.innerHTML = '<li class="history-empty">Noch nichts gespeichert. Jeder erstellte Prompt landet automatisch hier.</li>';
+      el.clearHistory.hidden = true;
+      return;
+    }
+    el.clearHistory.hidden = false;
+    el.historyList.innerHTML = history.map((h, i) => {
+      const d = engine.byId(h.domainId);
+      const when = new Date(h.date).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+      return `<li><button type="button" class="history-item" data-index="${i}">
+        <span class="hi-meta">${esc(when)} · ${esc(d.label)}</span>
+        <span class="hi-idea">${esc(h.idea.length > 140 ? h.idea.slice(0, 140) + ' …' : h.idea)}</span>
+      </button></li>`;
+    }).join('');
+  }
+
+  el.historyBtn.addEventListener('click', () => {
+    renderHistory();
+    el.historyDialog.showModal();
+  });
+  el.historyDialog.addEventListener('click', (e) => {
+    if (e.target === el.historyDialog || e.target.closest('[data-close]')) el.historyDialog.close();
+    const item = e.target.closest('.history-item');
+    if (!item) return;
+    const h = history[Number(item.dataset.index)];
+    if (!h) return;
+    settings = Object.assign({}, DEFAULTS, h.settings, { speechLang: settings.speechLang, spokenPunct: settings.spokenPunct });
+    persist();
+    applySettingsToForm();
+    renderChips();
+    el.idea.value = h.idea;
+    onIdeaChange();
+    const meta = { domain: engine.byId(h.domainId), secondary: h.secondaryId ? engine.byId(h.secondaryId) : null, role: h.role, detail: h.detail, words: h.words, tokens: h.tokens };
+    current = { text: h.text, meta, idea: h.idea, date: h.date };
+    generatedFrom = h.idea;
+    renderOutput(h.text, true);
+    renderMeta(meta, h.date);
+    el.stale.hidden = true;
+    el.historyDialog.close();
+    toast('Prompt aus dem Verlauf geladen.');
+  });
+  el.clearHistory.addEventListener('click', () => {
+    if (!confirm('Den gesamten Verlauf löschen? Das lässt sich nicht rückgängig machen.')) return;
+    history = [];
+    save(STORE.history, history);
+    renderHistory();
+    renderHistoryCount();
+  });
+
+  /* ---------- Start ---------- */
+  applySettingsToForm();
+  renderChips();
+  renderHistoryCount();
+  el.idea.value = load(STORE.draft, '');
+  onIdeaChange();
+  if (speech.isMobile) document.documentElement.classList.add('touch');
+})();

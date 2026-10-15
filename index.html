@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="de">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Prompt-Generator</title>
+  <meta name="description" content="Aus deiner Idee wird ein ausführlicher Master-Prompt für ChatGPT, Claude, Gemini und Co. – tippen oder einfach reinsprechen.">
+  <meta name="color-scheme" content="light dark">
+  <meta name="theme-color" content="#2343D1">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='7' fill='%232343D1'/%3E%3Cpath d='M8 8h16M8 8v16M16 8v16M24 8v16M8 16h16M8 24h16' stroke='%23fff' stroke-opacity='.28' stroke-width='1'/%3E%3Cpath d='M11 23V9h6a4.5 4.5 0 0 1 0 9h-6' fill='none' stroke='%23fff' stroke-width='2.6' stroke-linejoin='round'/%3E%3C/svg%3E">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,100..900&family=Martian+Mono:wdth,wght@75..112.5,100..800&display=swap">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="wordmark" href="./" aria-label="Prompt-Generator, Startseite">
+      <span class="wordmark-glyph" aria-hidden="true"></span>Prompt-Generator
+    </a>
+    <button id="historyBtn" class="topbar-btn" type="button">Verlauf <span id="historyCount" class="count"></span></button>
+  </header>
+
+  <main class="workbench">
+    <section class="composer" aria-labelledby="headline">
+      <h1 id="headline">Sag, was du <span>bauen</span> willst.</h1>
+      <p class="lede">Beschreib deine Idee – getippt oder gesprochen. Du bekommst einen ausführlichen Master-Prompt, den du direkt in ChatGPT, Claude oder Gemini einfügst.</p>
+
+      <div class="step">
+        <h2 class="step-label"><span class="step-no">1</span>Deine Idee</h2>
+        <div class="idea-box">
+          <label for="idea" class="sr-only">Deine Idee</label>
+          <textarea id="idea" rows="7" spellcheck="true"
+            placeholder="Zum Beispiel: Ich will ein Open-World-Spiel wie GTA bauen, in dem man durch eine Stadt fährt und Missionen für verschiedene Auftraggeber erledigt …"></textarea>
+          <p class="interim" id="interim" aria-live="polite"></p>
+          <div class="idea-tools">
+            <button id="micBtn" class="mic" type="button" aria-pressed="false" aria-describedby="micStatus">
+              <span class="mic-ring" aria-hidden="true"></span>
+              <svg class="mic-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21M8.5 21h7"/></svg>
+              <svg class="stop-icon" viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="7" width="10" height="10" rx="2"/></svg>
+              <span class="sr-only" id="micSr">Spracheingabe starten</span>
+            </button>
+            <div class="mic-text">
+              <strong id="micLabel">Reinsprechen</strong>
+              <span id="micStatus">Klick aufs Mikrofon und erzähl einfach los.</span>
+            </div>
+            <div class="idea-meta">
+              <span id="ideaCount">0 Wörter</span>
+              <button id="clearIdea" class="text-btn" type="button">Leeren</button>
+            </div>
+          </div>
+        </div>
+        <div class="mic-options">
+          <label class="inline-field">Sprache
+            <select id="speechLang">
+              <option value="de-DE">Deutsch</option>
+              <option value="de-AT">Deutsch (Österreich)</option>
+              <option value="de-CH">Deutsch (Schweiz)</option>
+              <option value="en-US">Englisch (US)</option>
+              <option value="en-GB">Englisch (UK)</option>
+            </select>
+          </label>
+          <label class="check"><input type="checkbox" id="spokenPunct"> Gesagtes „Komma“, „Punkt“ und „neue Zeile“ als Zeichen setzen</label>
+        </div>
+        <div class="examples" id="examples">
+          <span class="examples-label">Beispiele</span>
+        </div>
+      </div>
+
+      <div class="step">
+        <h2 class="step-label" id="domainLabel"><span class="step-no">2</span>Bereich</h2>
+        <div class="chips" id="domainChips" role="radiogroup" aria-labelledby="domainLabel"></div>
+      </div>
+
+      <details class="step tune" id="tune">
+        <summary class="step-label"><span class="step-no">3</span>Feinschliff <span class="optional">optional</span></summary>
+        <div class="tune-grid">
+          <fieldset class="tune-row">
+            <legend>Dein Level</legend>
+            <div class="seg">
+              <label><input type="radio" name="level" value="anfaenger"><span>Anfänger</span></label>
+              <label><input type="radio" name="level" value="fortgeschritten"><span>Fortgeschritten</span></label>
+              <label><input type="radio" name="level" value="profi"><span>Profi</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="tune-row">
+            <legend>Detailgrad</legend>
+            <div class="seg">
+              <label><input type="radio" name="detail" value="kompakt"><span>Kompakt</span></label>
+              <label><input type="radio" name="detail" value="ausfuehrlich"><span>Ausführlich</span></label>
+              <label><input type="radio" name="detail" value="maximal"><span>Maximal</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="tune-row">
+            <legend>Für welche KI</legend>
+            <div class="seg">
+              <label><input type="radio" name="target" value="chat"><span>Chat-KI</span></label>
+              <label><input type="radio" name="target" value="agent"><span>Coding-Agent</span></label>
+            </div>
+            <p class="hint">Chat-KI: ChatGPT, Claude, Gemini. Coding-Agent: Claude Code, Cursor, Lovable – arbeitet direkt in deinen Dateien.</p>
+          </fieldset>
+          <fieldset class="tune-row">
+            <legend>Format</legend>
+            <div class="seg">
+              <label><input type="radio" name="format" value="markdown"><span>Markdown</span></label>
+              <label><input type="radio" name="format" value="xml"><span>XML-Tags</span></label>
+            </div>
+            <p class="hint">XML-Tags funktionieren besonders gut mit Claude.</p>
+          </fieldset>
+          <fieldset class="tune-row">
+            <legend>Antwortsprache</legend>
+            <div class="seg">
+              <label><input type="radio" name="answerLang" value="de"><span>Deutsch</span></label>
+              <label><input type="radio" name="answerLang" value="en"><span>Englisch</span></label>
+            </div>
+          </fieldset>
+          <fieldset class="tune-row toggles">
+            <legend>Ablauf</legend>
+            <label class="check"><input type="checkbox" name="clarify"> KI stellt zuerst Rückfragen</label>
+            <label class="check"><input type="checkbox" name="plan"> Erst Plan, dann Umsetzung</label>
+            <label class="check"><input type="checkbox" name="selfcheck"> Selbstcheck am Ende</label>
+          </fieldset>
+          <div class="tune-fields">
+            <label class="field">Technik & Tools<input type="text" name="tech" placeholder="z. B. Unity, React, Blender" autocomplete="off"></label>
+            <label class="field">Zielgruppe<input type="text" name="audience" placeholder="z. B. Jugendliche, meine Klasse" autocomplete="off"></label>
+            <label class="field">Stil & Ton<input type="text" name="tone" placeholder="z. B. düster, witzig, minimalistisch" autocomplete="off"></label>
+            <label class="field">Muss unbedingt rein<input type="text" name="must" placeholder="z. B. Speichersystem, Dark Mode" autocomplete="off"></label>
+            <label class="field wide">Auf keinen Fall<input type="text" name="avoid" placeholder="z. B. kostenpflichtige Tools, Multiplayer" autocomplete="off"></label>
+          </div>
+        </div>
+      </details>
+
+      <button id="generateBtn" class="generate" type="button">
+        Master-Prompt erstellen <kbd>Strg + Enter</kbd>
+      </button>
+    </section>
+
+    <section class="sheet" id="sheet" aria-labelledby="sheetTitle">
+      <div class="sheet-head">
+        <h2 id="sheetTitle">Master-Prompt</h2>
+        <button id="staleBtn" class="stale" type="button" hidden>Idee geändert · neu erstellen</button>
+        <div class="sheet-actions">
+          <button id="copyBtn" class="sheet-btn primary" type="button" disabled>Kopieren</button>
+          <button id="downloadBtn" class="sheet-btn" type="button" disabled>Als .txt speichern</button>
+        </div>
+      </div>
+      <div class="sheet-body" id="sheetBody" tabindex="0" aria-label="Master-Prompt-Text">
+        <div class="sheet-empty" id="sheetEmpty">
+          <p class="empty-title">Noch kein Bauplan.</p>
+          <p>Beschreib deine Idee und drück auf „Master-Prompt erstellen“. Je mehr du verrätst – Zweck, Stil, Technik, Zielgruppe –, desto genauer wird der Prompt.</p>
+        </div>
+        <pre id="output" hidden></pre>
+      </div>
+      <dl class="titleblock">
+        <div><dt>Bereich</dt><dd id="tbDomain">–</dd></div>
+        <div><dt>Rolle</dt><dd id="tbRole">–</dd></div>
+        <div><dt>Detailgrad</dt><dd id="tbDetail">–</dd></div>
+        <div><dt>Umfang</dt><dd id="tbSize">–</dd></div>
+        <div><dt>Erstellt</dt><dd id="tbDate">–</dd></div>
+      </dl>
+    </section>
+  </main>
+
+  <dialog id="historyDialog" class="history" aria-labelledby="historyTitle">
+    <div class="dlg-head">
+      <h2 id="historyTitle">Verlauf</h2>
+      <button class="icon-btn" type="button" data-close aria-label="Verlauf schließen">
+        <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18"/></svg>
+      </button>
+    </div>
+    <p class="dlg-note">Deine letzten 25 Prompts. Gespeichert nur in diesem Browser.</p>
+    <ol id="historyList" class="history-list"></ol>
+    <div class="dlg-foot">
+      <button id="clearHistory" class="text-btn danger" type="button">Verlauf leeren</button>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script src="js/domains.js"></script>
+  <script src="js/engine.js"></script>
+  <script src="js/speech.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
