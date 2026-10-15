@@ -893,3 +893,131 @@ dialog.history::backdrop { background: rgba(13, 16, 23, .55); }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; scroll-behavior: auto !important; }
 }
+
+/* ---------- KI-Auswahl im Feinschliff ---------- */
+.ai-pick { display: flex; flex-wrap: wrap; gap: 8px; min-width: 0; }
+.ai-pick select {
+  min-width: 0;
+  max-width: 100%;
+  padding: 7px 28px 7px 10px;
+  border: 1px solid var(--rule);
+  border-radius: 9px;
+  background: var(--panel);
+  color: var(--ink);
+  font-size: .9rem;
+  text-overflow: ellipsis;
+}
+
+/* ---------- KI-Status über dem Bogen ---------- */
+.ai-status {
+  position: relative;
+  z-index: 2;
+  margin: 0 9px;
+  padding: 10px 17px 12px;
+  border-bottom: 1px solid var(--frame);
+}
+.ai-status-row { display: flex; align-items: center; gap: 12px; }
+.ai-phase {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--mono);
+  font-stretch: 87.5%;
+  font-size: 11.5px;
+  color: var(--on-cobalt);
+}
+.ai-status .sheet-btn { min-height: 30px; padding: 0 12px; font-size: .82rem; }
+.ai-bar {
+  position: relative;
+  height: 3px;
+  margin-top: 9px;
+  overflow: hidden;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, .18);
+}
+.ai-bar span {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: 3px;
+  background: #fff;
+  transition: width .3s ease;
+}
+.ai-bar.busy span {
+  position: absolute;
+  width: 35%;
+  animation: busy 1.4s ease-in-out infinite;
+}
+@keyframes busy {
+  from { left: -35%; }
+  to { left: 100%; }
+}
+
+/* ---------- Panels im Bogen (Auswahl, Anmeldung, Fehler, Live-Ansicht) ---------- */
+.ai-panel {
+  max-width: 560px;
+  margin: 0 auto;
+  padding: 36px 18px 32px;
+}
+.panel-title {
+  margin: 0 0 8px;
+  font-family: var(--display);
+  font-stretch: 125%;
+  font-weight: 800;
+  font-size: 1.45rem;
+  line-height: 1.15;
+  color: #fff;
+}
+.panel-sub {
+  margin: 0 0 10px;
+  color: var(--on-cobalt-dim);
+  font-size: .93rem;
+  line-height: 1.55;
+}
+.panel-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 18px; }
+
+.choose-grid { display: grid; gap: 10px; margin-top: 20px; }
+.choose-card {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 12px;
+  background: rgba(255, 255, 255, .06);
+  color: var(--on-cobalt);
+  text-align: left;
+  font-size: .88rem;
+  line-height: 1.45;
+  transition: background .12s, border-color .12s;
+}
+.choose-card:hover:not(:disabled) { background: rgba(255, 255, 255, .14); border-color: #fff; }
+.choose-card:disabled { opacity: .45; }
+.choose-card strong { font-size: 1rem; color: #fff; }
+.choose-card span { color: var(--on-cobalt-dim); }
+.choose-card b { color: #fff; font-weight: 600; }
+.choose-card em { font-style: normal; color: #FFE3A8; }
+.choose-card em:empty { display: none; }
+.choose-card.quiet { background: transparent; border-style: dashed; }
+.cc-tag {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: #fff;
+  color: #1A33A6 !important;
+  font-family: var(--mono);
+  font-size: 10px;
+  font-weight: 600;
+}
+
+.live-list { display: grid; gap: 14px; margin: 22px 0 0; }
+.live-list dt {
+  font-family: var(--mono);
+  font-size: 10px;
+  letter-spacing: .12em;
+  text-transform: uppercase;
+  color: var(--on-cobalt-dim);
+}
+.live-list dd { margin: 3px 0 0; color: #fff; font-size: .95rem; line-height: 1.5; }

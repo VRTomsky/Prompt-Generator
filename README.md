@@ -1,25 +1,35 @@
 # Prompt-Generator
 
 Aus einer Idee wird ein ausführlicher **Master-Prompt** für ChatGPT, Claude, Gemini und Co.
-Idee eintippen oder einfach reinsprechen – die Seite baut daraus einen strukturierten Prompt mit
-Expertenrolle, Auftrag, Themenliste, Qualitätsstandards, Vorgehen, Ausgabeformat und Regeln.
+Idee eintippen oder einfach reinsprechen – eine echte KI liest sie, versteht den Kern und baut daraus
+einen detaillierten Prompt.
 
-Beispiel: *„Ich will ein Open-World-Spiel wie GTA 6 bauen …“* wird zu einem Prompt, der mit
-*„Du bist Senior Game Developer und Lead Game Designer mit über 12 Jahren Erfahrung …“* beginnt.
+## So versteht die Seite deine Idee
+
+Die KI bekommt deine Idee und liefert zuerst eine Analyse: Was ist der **Kern** und was nur das **Mittel**
+(bei „eine Webseite, auf der ich meine Sprintzeiten tracke, um in die erste Mannschaft zu kommen“ ist Fußballtraining
+der Kern und die Webseite nur das Werkzeug). Daraus entstehen eine passende Rolle, eine ausführliche
+Projektbeschreibung, konkrete Anforderungen, Rahmenbedingungen, Lösungsweg, Qualitätskriterien, typische Fehler
+und Rückfragen. Die Seite setzt das zu einem sauber gegliederten Master-Prompt zusammen und hängt deine
+Einstellungen (Level, Vorgehen, Antwortsprache …) an.
+
+Welche KI das macht, wählst du beim ersten Erstellen (später unter „Feinschliff“). Alle Wege sind kostenlos:
+
+| Weg | Qualität | Voraussetzung |
+| --- | --- | --- |
+| **Cloud-KI** über [Puter.js](https://developer.puter.com) (Gemini, Claude, GPT) | am besten | kostenloses Puter-Konto mit monatlichem Freikontingent; die Idee geht an den KI-Anbieter |
+| **KI im Browser** (Qwen 3.5 über [WebLLM](https://github.com/mlc-ai/web-llm)) | gut, aber ungenauer | WebGPU-fähige Grafikkarte, einmalig ca. 6 GB (9B) bzw. 3 GB (4B) Download; nichts verlässt den PC |
+| **Ollama** | je nach Modell | lokal laufendes Ollama; von GitHub Pages aus nur mit `OLLAMA_ORIGINS`, über `start.bat` direkt |
+| **Ohne KI** | Vorlage | nichts – füllt aber nur eine Bereichsvorlage und versteht die Idee nicht |
 
 ## Funktionen
 
-- **13 Fachbereiche** mit eigener Expertenrolle: Spiel, Webseite, App, Software & Tools, 3D & Blender,
-  Bild & Design, Video & Content, Musik & Audio, Text & Story, Business & Marketing, Lernen & Schule,
-  Sport & Fitness, Daten & Analyse – plus „Sonstiges“ für alles andere.
-- **Automatische Erkennung** von Bereich, Technik (z. B. Unity, React, Blender), Plattform,
-  Vorbildern (z. B. GTA, Minecraft), Zielgruppe und Projektgröße.
 - **Spracheingabe** in jedem modernen Browser: lokal mit Whisper oder über den Erkennungsdienst von
   Chrome/Edge (siehe unten). Füllwörter wie „äh“ und „ähm“ werden entfernt.
-- **Feinschliff**: Erfahrungslevel, Detailgrad, Chat-KI oder Coding-Agent, Markdown oder XML-Tags,
+- **Feinschliff**: welche KI schreibt, Erfahrungslevel, Detailgrad, Chat-KI oder Coding-Agent, Markdown oder XML-Tags,
   Antwortsprache, Rückfragen, Plan, Selbstcheck sowie Felder für Technik, Zielgruppe, Stil, Pflicht- und Ausschlusspunkte.
+- Live-Ansicht, während die KI arbeitet (Kern, Rolle, Anzahl Anforderungen), Abbrechen jederzeit.
 - Kopieren mit einem Klick, Speichern als `.txt`, Verlauf der letzten 25 Prompts (nur im eigenen Browser).
-- Läuft komplett im Browser – kein Server, kein Konto, kein API-Schlüssel.
 
 ## Starten
 
@@ -50,12 +60,13 @@ schaltet die Seite automatisch auf Whisper um. Beim ersten Klick fragt der Brows
 | --- | --- |
 | `index.html` | Seitenstruktur |
 | `css/style.css` | Design („Bauplan“-Look, Hell- und Dunkelmodus) |
-| `js/domains.js` | Wissensbasis: Rollen, Themen, Standards und Erkennungswörter je Bereich, dazu Querschnittsthemen (Download, MP3, „nur lokal“, Login, KI …) |
-| `js/engine.js` | Analyse der Idee (erst *was* gebaut wird, dann das Thema) und Zusammenbau des Master-Prompts |
+| `js/domains.js` | Vorlagen für „Ohne KI“: Rollen, Themen, Standards und Erkennungswörter je Bereich, dazu Querschnittsthemen (Download, MP3, „nur lokal“, Login, KI …) |
+| `js/ai.js` | KI-Analyse der Idee (Cloud, Browser, Ollama) und Zusammenbau des Master-Prompts |
+| `js/llm-worker.js` | Hintergrund-Worker für die KI im Browser |
+| `js/engine.js` | Vorlagen-Modus „Ohne KI“ (erst *was* gebaut wird, dann das Thema) |
 | `js/speech.js` | Spracheingabe über den Browser-Dienst |
 | `js/speech-local.js`, `js/whisper-worker.js` | Lokale Spracheingabe mit Whisper (Pausenerkennung, Modell im Hintergrund) |
 | `js/app.js` | Bedienung, Einstellungen, Verlauf |
 | `server.js`, `start.bat` | Mini-Webserver für die lokale Nutzung mit Mikrofon |
 
-**Neuen Bereich hinzufügen:** in `js/domains.js` ein weiteres Objekt nach dem Muster der vorhandenen anlegen –
-die Oberfläche zeigt es automatisch als Auswahl an.
+**Anweisung an die KI anpassen:** `systemPrompt()` in `js/ai.js`. **Aufbau des fertigen Prompts:** `assemble()` in `js/ai.js`.

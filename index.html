@@ -83,14 +83,28 @@
         </div>
       </div>
 
-      <div class="step">
+      <div class="step" id="domainStep" hidden>
         <h2 class="step-label" id="domainLabel"><span class="step-no">2</span>Bereich</h2>
         <div class="chips" id="domainChips" role="radiogroup" aria-labelledby="domainLabel"></div>
       </div>
 
       <details class="step tune" id="tune">
-        <summary class="step-label"><span class="step-no">3</span>Feinschliff <span class="optional">optional</span></summary>
+        <summary class="step-label"><span class="step-no" id="tuneNo">2</span>Feinschliff <span class="optional">optional</span></summary>
         <div class="tune-grid">
+          <fieldset class="tune-row">
+            <legend>Welche KI schreibt</legend>
+            <div class="ai-pick">
+              <select id="aiEngine" aria-label="KI, die den Prompt schreibt">
+                <option value="">Beim ersten Erstellen auswählen</option>
+                <option value="cloud">Cloud-KI über Puter (beste Qualität)</option>
+                <option value="browser">KI im Browser (ohne Konto, privat)</option>
+                <option value="ollama">Ollama auf deinem PC</option>
+                <option value="template">Ohne KI (Vorlage, sofort)</option>
+              </select>
+              <select id="aiModel" aria-label="Modell"></select>
+            </div>
+            <p class="hint" id="aiHint"></p>
+          </fieldset>
           <fieldset class="tune-row">
             <legend>Dein Level</legend>
             <div class="seg">
@@ -147,7 +161,7 @@
       </details>
 
       <button id="generateBtn" class="generate" type="button">
-        Master-Prompt erstellen <kbd>Strg + Enter</kbd>
+        <span id="generateLabel">Master-Prompt erstellen</span> <kbd>Strg + Enter</kbd>
       </button>
     </section>
 
@@ -160,7 +174,62 @@
           <button id="downloadBtn" class="sheet-btn" type="button" disabled>Als .txt speichern</button>
         </div>
       </div>
+      <div class="ai-status" id="aiStatus" hidden>
+        <div class="ai-status-row">
+          <span class="ai-phase" id="aiPhase" aria-live="polite"></span>
+          <button id="aiStop" class="sheet-btn" type="button">Stopp</button>
+        </div>
+        <div class="ai-bar" id="aiBar"><span></span></div>
+      </div>
       <div class="sheet-body" id="sheetBody" tabindex="0" aria-label="Master-Prompt-Text">
+        <div class="ai-panel" id="aiChoose" hidden>
+          <p class="panel-title">Welche KI soll deine Idee verstehen?</p>
+          <p class="panel-sub">Eine echte KI liest deine Idee, findet den Kern und baut daraus den Master-Prompt. Alle Wege sind kostenlos. Du kannst das später unter „Feinschliff“ ändern.</p>
+          <div class="choose-grid">
+            <button type="button" class="choose-card" data-engine="cloud">
+              <span class="cc-tag">Empfohlen</span>
+              <strong>Cloud-KI</strong>
+              <span>Claude, Gemini &amp; Co. über Puter. Beste Qualität. Kostenloses Puter-Konto mit monatlichem Freikontingent.</span>
+            </button>
+            <button type="button" class="choose-card" data-engine="browser" id="chooseBrowser">
+              <strong>KI im Browser</strong>
+              <span>Qwen 3.5 läuft auf deiner Grafikkarte. Kein Konto, nichts verlässt deinen PC. Einmalig ca. 6 GB Download.</span>
+              <em id="chooseBrowserNote"></em>
+            </button>
+            <button type="button" class="choose-card" data-engine="ollama" id="revealOllama" hidden>
+              <strong>Dein Ollama</strong>
+              <span>Nutzt <b id="ollamaName"></b> auf deinem PC.</span>
+            </button>
+            <button type="button" class="choose-card quiet" data-engine="template">
+              <strong>Ohne KI</strong>
+              <span>Sofort fertig, füllt aber nur eine Vorlage – versteht deine Idee nicht wirklich.</span>
+            </button>
+          </div>
+        </div>
+        <div class="ai-panel" id="aiSignin" hidden>
+          <p class="panel-title">Einmal bei Puter anmelden</p>
+          <p class="panel-sub">Die Cloud-KI läuft über Puter. Mit einem kostenlosen Konto bekommst du jeden Monat ein Freikontingent – ohne Kreditkarte, ohne API-Schlüssel.</p>
+          <div class="panel-actions">
+            <button type="button" class="sheet-btn primary" id="aiSigninBtn">Bei Puter anmelden</button>
+          </div>
+        </div>
+        <div class="ai-panel" id="aiMsg" hidden>
+          <p class="panel-title">Das hat nicht geklappt</p>
+          <p class="panel-sub" id="aiMsgText"></p>
+          <p class="panel-sub" id="aiMsgHint"></p>
+          <div class="panel-actions">
+            <button type="button" class="sheet-btn primary" id="aiRetry">Nochmal versuchen</button>
+            <button type="button" class="sheet-btn" id="aiOther">Andere KI wählen</button>
+          </div>
+        </div>
+        <div class="ai-panel ai-live" id="aiLive" hidden>
+          <p class="panel-title">Die KI liest deine Idee …</p>
+          <dl class="live-list">
+            <div><dt>Kern</dt><dd id="liveKern">…</dd></div>
+            <div><dt>Rolle</dt><dd id="liveRolle">…</dd></div>
+            <div><dt>Anforderungen</dt><dd id="liveReq">…</dd></div>
+          </dl>
+        </div>
         <div class="sheet-empty" id="sheetEmpty">
           <p class="empty-title">Noch kein Bauplan.</p>
           <p>Beschreib deine Idee und drück auf „Master-Prompt erstellen“. Je mehr du verrätst – Zweck, Stil, Technik, Zielgruppe –, desto genauer wird der Prompt.</p>
@@ -168,7 +237,7 @@
         <pre id="output" hidden></pre>
       </div>
       <dl class="titleblock">
-        <div><dt>Bereich</dt><dd id="tbDomain">–</dd></div>
+        <div><dt id="tbFirstLabel">Bereich</dt><dd id="tbDomain">–</dd></div>
         <div><dt>Rolle</dt><dd id="tbRole">–</dd></div>
         <div><dt>Detailgrad</dt><dd id="tbDetail">–</dd></div>
         <div><dt>Umfang</dt><dd id="tbSize">–</dd></div>
@@ -195,6 +264,7 @@
 
   <script src="js/domains.js"></script>
   <script src="js/engine.js"></script>
+  <script src="js/ai.js"></script>
   <script src="js/speech.js"></script>
   <script src="js/speech-local.js"></script>
   <script src="js/app.js"></script>

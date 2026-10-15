@@ -10,7 +10,8 @@
     domain: 'auto', level: 'anfaenger', detail: 'ausfuehrlich', target: 'chat', format: 'markdown',
     answerLang: 'de', clarify: true, plan: true, selfcheck: true,
     tech: '', audience: '', tone: '', must: '', avoid: '',
-    speechLang: 'de-DE', spokenPunct: false, speechEngine: 'auto', localModel: 'base'
+    speechLang: 'de-DE', spokenPunct: false, speechEngine: 'auto', localModel: 'base',
+    aiEngine: '', cloudModel: 'balanced', browserSize: 'large'
   };
   const EXAMPLES = [
     ['Open-World-Spiel', 'Ich will ein Open-World-Spiel wie GTA 6 bauen. Man fährt durch eine große Stadt, erledigt Missionen für verschiedene Auftraggeber und kann Autos klauen und tunen. Am liebsten in Unity für den PC.'],
@@ -32,7 +33,15 @@
     copy: $('copyBtn'), download: $('downloadBtn'), stale: $('staleBtn'),
     tbDomain: $('tbDomain'), tbRole: $('tbRole'), tbDetail: $('tbDetail'), tbSize: $('tbSize'), tbDate: $('tbDate'),
     historyBtn: $('historyBtn'), historyCount: $('historyCount'), historyDialog: $('historyDialog'),
-    historyList: $('historyList'), clearHistory: $('clearHistory'), toast: $('toast')
+    historyList: $('historyList'), clearHistory: $('clearHistory'), toast: $('toast'),
+    generateLabel: $('generateLabel'), domainStep: $('domainStep'), tuneNo: $('tuneNo'),
+    aiEngine: $('aiEngine'), aiModel: $('aiModel'), aiHint: $('aiHint'), tbFirstLabel: $('tbFirstLabel'),
+    aiStatus: $('aiStatus'), aiPhase: $('aiPhase'), aiBar: $('aiBar'), aiStop: $('aiStop'),
+    aiChoose: $('aiChoose'), chooseBrowser: $('chooseBrowser'), chooseBrowserNote: $('chooseBrowserNote'),
+    revealOllama: $('revealOllama'), ollamaName: $('ollamaName'),
+    aiSignin: $('aiSignin'), aiSigninBtn: $('aiSigninBtn'),
+    aiMsg: $('aiMsg'), aiMsgText: $('aiMsgText'), aiMsgHint: $('aiMsgHint'), aiRetry: $('aiRetry'), aiOther: $('aiOther'),
+    aiLive: $('aiLive'), liveKern: $('liveKern'), liveRolle: $('liveRolle'), liveReq: $('liveReq')
   };
 
   /* ---------- Speicher (fehlertolerant) ---------- */
@@ -126,6 +135,45 @@
   }
 
   function persist() { save(STORE.settings, settings); }
+
+  /* ---------- KI-Auswahl im Feinschliff ---------- */
+  const MODEL_OPTIONS = {
+    cloud: [['balanced', 'Gemini 3.5 Flash – schnell und gut'], ['best', 'Claude Sonnet 5.5 – beste Qualität, braucht mehr Kontingent'], ['light', 'GPT-5.4 nano – sparsam']],
+    browser: [['large', 'Qwen 3.5 9B – genauer (einmalig ca. 6 GB)'], ['medium', 'Qwen 3.5 4B – kleiner (einmalig ca. 3 GB)']]
+  };
+  const ENGINE_HINTS = {
+    '': 'Beim ersten Erstellen fragt dich die Seite, welche KI deine Idee lesen soll.',
+    cloud: 'Läuft über Puter.js mit kostenlosem Puter-Konto (monatliches Freikontingent). Deine Idee wird dafür an den KI-Anbieter geschickt.',
+    browser: 'Läuft komplett auf deiner Grafikkarte – kein Konto, nichts verlässt deinen PC. Das Modell wird beim ersten Mal geladen. Kleiner als die Cloud-KI, daher etwas ungenauer.',
+    ollama: 'Nutzt das größte Modell in deinem lokal installierten Ollama.',
+    template: 'Sofort fertig, versteht deine Idee aber nicht wirklich – die Seite füllt nur eine Vorlage für den erkannten Bereich.'
+  };
+
+  function applyEngineUI() {
+    const eng = settings.aiEngine || '';
+    el.aiEngine.value = eng;
+    const opts = MODEL_OPTIONS[eng];
+    el.aiModel.hidden = !opts;
+    if (opts) {
+      const key = eng === 'cloud' ? 'cloudModel' : 'browserSize';
+      el.aiModel.innerHTML = opts.map(([v, l]) => `<option value="${v}">${esc(l)}</option>`).join('');
+      el.aiModel.value = settings[key];
+    }
+    el.aiHint.textContent = ENGINE_HINTS[eng] || '';
+    const template = eng === 'template';
+    el.domainStep.hidden = !template;
+    el.tuneNo.textContent = template ? '3' : '2';
+  }
+
+  el.aiEngine.addEventListener('change', () => {
+    setEngine(el.aiEngine.value);
+    if (current && el.idea.value.trim()) el.stale.hidden = false;
+  });
+  el.aiModel.addEventListener('change', () => {
+    settings[settings.aiEngine === 'cloud' ? 'cloudModel' : 'browserSize'] = el.aiModel.value;
+    persist();
+    if (current && current.meta.source === 'ai') el.stale.hidden = false;
+  });
 
   el.tune.addEventListener('input', (e) => {
     const t = e.target;
@@ -391,45 +439,216 @@
   }
 
   function renderMeta(meta, date) {
-    el.tbDomain.textContent = meta.domain.field + (meta.secondary ? ` + ${meta.secondary.label}` : '');
+    el.tbFirstLabel.textContent = meta.firstLabel;
+    el.tbDomain.textContent = meta.first;
     el.tbRole.textContent = meta.role;
     el.tbDetail.textContent = meta.detail;
     el.tbSize.textContent = `${fmt.format(meta.words)} Wörter · ≈ ${fmt.format(meta.tokens)} Tokens`;
     el.tbDate.textContent = new Date(date).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
   }
 
+  const DETAIL_LABEL = { kompakt: 'Kompakt', ausfuehrlich: 'Ausführlich', maximal: 'Maximal' };
+  const stats = (text) => ({ words: (text.match(/\S+/g) || []).length, tokens: Math.round(text.length / 3.6) });
+
+  // Aus "Du bist Expertin für X und Y …" wird "Expertin für X"
+  function shortRole(rolle) {
+    const r = rolle.replace(/^du bist\s+(?:ein(?:e|en)?\s+)?/i, '').split(/[.;,]|\sund\s|\ssowie\s/)[0].trim();
+    return r.length > 60 ? r.slice(0, 58).replace(/\s+\S*$/, '') + ' …' : r;
+  }
+
+  function nudgeIdea() {
+    toast('Schreib oder sprich zuerst deine Idee.');
+    el.idea.focus();
+    el.idea.parentElement.classList.remove('nudge');
+    void el.idea.parentElement.offsetWidth;
+    el.idea.parentElement.classList.add('nudge');
+  }
+
+  function showResult(text, meta, idea, date, animate) {
+    current = { text, meta, idea, date };
+    generatedFrom = idea;
+    renderOutput(text, animate);
+    renderMeta(meta, date);
+    el.stale.hidden = true;
+  }
+
   function generate(opts) {
     const options = opts || {};
     const idea = (options.idea != null ? options.idea : el.idea.value).trim();
-    if (!idea) {
-      if (!options.silent) {
-        toast('Schreib oder sprich zuerst deine Idee.');
-        el.idea.focus();
-        el.idea.parentElement.classList.remove('nudge');
-        void el.idea.parentElement.offsetWidth;
-        el.idea.parentElement.classList.add('nudge');
-      }
-      return;
-    }
-    const result = engine.build(idea, Object.assign({}, settings, { dictated }));
-    const date = options.keepDate && current ? current.date : Date.now();
-    current = { text: result.text, meta: result.meta, idea, date };
-    generatedFrom = idea;
-    renderOutput(result.text, !options.silent);
-    renderMeta(result.meta, date);
-    el.stale.hidden = true;
+    if (!idea) { if (!options.silent) nudgeIdea(); return; }
+    if (options.silent || settings.aiEngine === 'template') return generateTemplate(idea, options);
+    if (!settings.aiEngine) return showChooser();
+    generateAI(idea);
+  }
 
+  /* ---------- Ohne KI: Vorlagen-Engine ---------- */
+  function generateTemplate(idea, options) {
+    const result = engine.build(idea, Object.assign({}, settings, { dictated }));
+    const m = result.meta;
+    const meta = {
+      source: 'template', firstLabel: 'Bereich',
+      first: m.domain.field + (m.secondary ? ` + ${m.secondary.label}` : ''),
+      role: m.role, detail: m.detail, words: m.words, tokens: m.tokens, slug: m.domain.id, tag: m.domain.label
+    };
+    const date = options.keepDate && current ? current.date : Date.now();
+    hideSheetPanels();
+    showResult(result.text, meta, idea, date, !options.silent);
     if (!options.silent) {
       addHistory(current);
       if (countWords(idea) < 6) toast('Tipp: Je mehr Details du nennst, desto genauer wird der Prompt.');
-      if (window.matchMedia('(max-width: 999px)').matches) el.sheet.scrollIntoView({ behavior: 'smooth', block: 'start' });
-      el.sheetBody.scrollTop = 0;
+      revealSheet();
     }
+  }
+
+  function revealSheet() {
+    if (window.matchMedia('(max-width: 999px)').matches) el.sheet.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    el.sheetBody.scrollTop = 0;
+  }
+
+  /* ---------- Mit KI ---------- */
+  let aiRun = null;
+
+  function hideSheetPanels() {
+    el.aiChoose.hidden = true;
+    el.aiMsg.hidden = true;
+    el.aiLive.hidden = true;
+    el.aiStatus.hidden = true;
+  }
+
+  function showEmptyOr(panel) {
+    el.output.hidden = true;
+    el.empty.hidden = true;
+    panel.hidden = false;
+  }
+
+  function setPhase(info) {
+    el.aiStatus.hidden = false;
+    const bar = el.aiBar.firstElementChild;
+    if (info.phase === 'load') {
+      const pct = Math.round((info.progress || 0) * 100);
+      el.aiPhase.textContent = `KI-Modell wird geladen (einmalig ${info.size}) · ${pct} %`;
+      el.aiBar.classList.remove('busy');
+      bar.style.width = pct + '%';
+    } else {
+      if (info.label) aiRun.label = info.label;
+      el.aiPhase.textContent = `${aiRun.label || 'Die KI'} liest deine Idee und schreibt den Prompt …`;
+      el.aiBar.classList.add('busy');
+      bar.style.width = '';
+    }
+  }
+
+  function setPeek(p) {
+    el.liveKern.textContent = p.kern || '…';
+    el.liveRolle.textContent = p.rolle || '…';
+    el.liveReq.textContent = p.anforderungen ? `${p.anforderungen} erkannt` : '…';
+  }
+
+  async function generateAI(idea) {
+    if (aiRun) return;
+    const ctrl = new AbortController();
+    aiRun = { ctrl, label: '' };
+    const runSettings = Object.assign({}, settings, { dictated });
+    el.generate.disabled = true;
+    el.generateLabel.textContent = 'KI arbeitet …';
+    hideSheetPanels();
+    setPeek({});
+    showEmptyOr(el.aiLive);
+    el.aiStatus.hidden = false;
+    el.aiPhase.textContent = 'Startet …';
+    el.aiBar.classList.add('busy');
+    revealSheet();
+    try {
+      const res = await PG.ai.generate(idea, runSettings, {
+        engine: settings.aiEngine, size: settings.browserSize, cloudModel: settings.cloudModel,
+        signal: ctrl.signal, onStatus: setPhase, onPeek: setPeek
+      });
+      const s = stats(res.text);
+      const meta = {
+        source: 'ai', firstLabel: 'Erstellt mit', first: res.model, role: shortRole(res.analysis.rolle),
+        detail: DETAIL_LABEL[settings.detail], words: s.words, tokens: s.tokens, slug: 'ki', tag: 'KI · ' + res.model
+      };
+      hideSheetPanels();
+      showResult(res.text, meta, idea, Date.now(), true);
+      addHistory(current);
+      el.sheetBody.scrollTop = 0;
+    } catch (err) {
+      hideSheetPanels();
+      if (ctrl.signal.aborted || (err && err.name === 'AbortError')) {
+        restoreAfterStop();
+      } else if (err && err.code === 'signin') {
+        showEmptyOr(el.aiSignin);
+      } else {
+        showAiError(err && err.message ? err.message : String(err), err && err.code);
+      }
+    } finally {
+      aiRun = null;
+      el.generate.disabled = false;
+      el.generateLabel.textContent = 'Master-Prompt erstellen';
+    }
+  }
+
+  function restoreAfterStop() {
+    if (current) { renderOutput(current.text, false); el.output.hidden = false; }
+    else el.empty.hidden = false;
+    toast('Abgebrochen.');
+  }
+
+  function showAiError(message, code) {
+    el.aiMsgText.textContent = message;
+    el.aiMsgHint.textContent = code === 'nogpu' || code === 'ollama'
+      ? 'Wähl eine andere KI – die Cloud-KI läuft in jedem Browser.'
+      : 'Versuch es nochmal oder wähl eine andere KI.';
+    showEmptyOr(el.aiMsg);
+  }
+
+  el.aiStop.addEventListener('click', () => { if (aiRun) aiRun.ctrl.abort(); });
+  el.aiRetry.addEventListener('click', () => generate());
+  el.aiOther.addEventListener('click', () => showChooser());
+
+  el.aiSigninBtn.addEventListener('click', async () => {
+    try {
+      const ok = await PG.ai.puterSignIn();
+      if (ok) generate();
+    } catch (_) {
+      toast('Anmeldung abgebrochen.');
+    }
+  });
+
+  // Erste Wahl: Welche KI soll den Prompt schreiben?
+  async function showChooser() {
+    hideSheetPanels();
+    showEmptyOr(el.aiChoose);
+    el.revealOllama.hidden = true;
+    const gpu = await PG.ai.webgpuInfo();
+    el.chooseBrowser.disabled = !gpu;
+    el.chooseBrowserNote.textContent = gpu ? '' : 'Dein Browser unterstützt kein WebGPU.';
+    const models = await PG.ai.ollamaModels();
+    if (models && models.length) {
+      el.revealOllama.hidden = false;
+      el.ollamaName.textContent = models.slice().sort((a, b) => b.size - a.size)[0].name;
+    }
+  }
+
+  el.aiChoose.addEventListener('click', (e) => {
+    const card = e.target.closest('[data-engine]');
+    if (!card || card.disabled) return;
+    setEngine(card.dataset.engine);
+    el.aiChoose.hidden = true;
+    generate();
+  });
+
+  function setEngine(engineId) {
+    settings.aiEngine = engineId;
+    persist();
+    applyEngineUI();
+    if (engineId === 'cloud') PG.ai.ensurePuter().catch(() => { /* Fehler zeigt später generate() */ });
   }
 
   let refreshTimer = 0;
   function refreshIfShown(delay) {
     if (!current) return;
+    // Mit KI wird nicht automatisch neu erzeugt – das kostet Zeit bzw. Kontingent
+    if (current.meta.source === 'ai') { el.stale.hidden = false; return; }
     clearTimeout(refreshTimer);
     refreshTimer = setTimeout(() => {
       // Optionen geändert: Prompt mit der Idee neu bauen, aus der er stammt
@@ -489,7 +708,7 @@
     const blob = new Blob([current.text], { type: 'text/plain;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `master-prompt-${current.meta.domain.id}-${day}.txt`;
+    a.download = `master-prompt-${current.meta.slug}-${day}.txt`;
     document.body.appendChild(a);
     a.click();
     a.remove();
@@ -499,11 +718,17 @@
 
   /* ---------- Verlauf ---------- */
   function snapshot(entry) {
+    return { date: entry.date, idea: entry.idea, text: entry.text, meta: entry.meta, settings: Object.assign({}, settings) };
+  }
+
+  // Ältere Verlaufseinträge hatten noch keine fertigen Metadaten
+  function entryMeta(h) {
+    if (h.meta) return h.meta;
+    const d = engine.byId(h.domainId);
+    const sec = h.secondaryId ? engine.byId(h.secondaryId) : null;
     return {
-      date: entry.date, idea: entry.idea, text: entry.text,
-      domainId: entry.meta.domain.id, secondaryId: entry.meta.secondary ? entry.meta.secondary.id : null,
-      words: entry.meta.words, tokens: entry.meta.tokens, role: entry.meta.role, detail: entry.meta.detail,
-      settings: Object.assign({}, settings)
+      source: 'template', firstLabel: 'Bereich', first: d.field + (sec ? ` + ${sec.label}` : ''),
+      role: h.role, detail: h.detail, words: h.words, tokens: h.tokens, slug: d.id, tag: d.label
     };
   }
 
@@ -527,10 +752,10 @@
     }
     el.clearHistory.hidden = false;
     el.historyList.innerHTML = history.map((h, i) => {
-      const d = engine.byId(h.domainId);
+      const tag = entryMeta(h).tag;
       const when = new Date(h.date).toLocaleString('de-DE', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       return `<li><button type="button" class="history-item" data-index="${i}">
-        <span class="hi-meta">${esc(when)} · ${esc(d.label)}</span>
+        <span class="hi-meta">${esc(when)} · ${esc(tag)}</span>
         <span class="hi-idea">${esc(h.idea.length > 140 ? h.idea.slice(0, 140) + ' …' : h.idea)}</span>
       </button></li>`;
     }).join('');
@@ -548,19 +773,16 @@
     if (!h) return;
     settings = Object.assign({}, DEFAULTS, h.settings, {
       speechLang: settings.speechLang, spokenPunct: settings.spokenPunct,
-      speechEngine: settings.speechEngine, localModel: settings.localModel
+      speechEngine: settings.speechEngine, localModel: settings.localModel,
+      aiEngine: settings.aiEngine, cloudModel: settings.cloudModel, browserSize: settings.browserSize
     });
     persist();
     applySettingsToForm();
     renderChips();
     el.idea.value = h.idea;
     onIdeaChange();
-    const meta = { domain: engine.byId(h.domainId), secondary: h.secondaryId ? engine.byId(h.secondaryId) : null, role: h.role, detail: h.detail, words: h.words, tokens: h.tokens };
-    current = { text: h.text, meta, idea: h.idea, date: h.date };
-    generatedFrom = h.idea;
-    renderOutput(h.text, true);
-    renderMeta(meta, h.date);
-    el.stale.hidden = true;
+    hideSheetPanels();
+    showResult(h.text, entryMeta(h), h.idea, h.date, true);
     el.historyDialog.close();
     toast('Prompt aus dem Verlauf geladen.');
   });
@@ -574,6 +796,8 @@
 
   /* ---------- Start ---------- */
   applySettingsToForm();
+  applyEngineUI();
+  if (settings.aiEngine === 'cloud') PG.ai.ensurePuter().catch(() => { /* später erneut */ });
   renderChips();
   renderHistoryCount();
   el.idea.value = load(STORE.draft, '');
